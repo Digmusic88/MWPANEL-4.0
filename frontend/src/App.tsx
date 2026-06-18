@@ -4051,9 +4051,12 @@ function Organizacion() {
 
   // --- Vista Grupos (tablero kanban) ---
   const kanban = (
-    <div style={{ display: 'flex', gap: 8, overflowX: 'auto', overflowY: 'auto', maxHeight: '72vh', paddingBottom: 12, alignItems: 'flex-start' }}>
-      {data.groups.length === 0 && !loading && <Empty description="No hay grupos en este servicio. Créalos en Grupos." />}
-      {columns.map((g: any) => {
+    // Contenedor exterior = único scroller (ambos ejes). El flex interior se dimensiona al contenido,
+    // así todas las columnas se estiran a la altura de la más larga (fondo sólido hasta abajo).
+    <div style={{ overflow: 'auto', maxHeight: '72vh' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', width: 'max-content', paddingBottom: 8 }}>
+        {data.groups.length === 0 && !loading && <Empty description="No hay grupos en este servicio. Créalos en Grupos." />}
+        {columns.map((g: any) => {
         const list = studentsOf(g.id);
         const nonWait = list.filter((s: any) => s.status !== 'lista_espera');
         const wait = list.filter((s: any) => s.status === 'lista_espera');
@@ -4159,6 +4162,7 @@ function Organizacion() {
           </div>
         );
       })}
+      </div>
     </div>
   );
 

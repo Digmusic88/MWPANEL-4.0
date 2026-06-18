@@ -4050,13 +4050,8 @@ function Organizacion() {
   const studentsOf = (gid: string | null) => data.students.filter((s: any) => (s.groupId || null) === (gid || null) && matchesText(s, q));
 
   // --- Vista Grupos (tablero kanban) ---
-  const kanban = (
-    // Contenedor exterior = único scroller (ambos ejes). El flex interior se dimensiona al contenido,
-    // así todas las columnas se estiran a la altura de la más larga (fondo sólido hasta abajo).
-    <div style={{ overflow: 'auto', maxHeight: '72vh' }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', width: 'max-content', paddingBottom: 8 }}>
-        {data.groups.length === 0 && !loading && <Empty description="No hay grupos en este servicio. Créalos en Grupos." />}
-        {columns.map((g: any) => {
+  // Render de una columna del tablero (se usa tanto para la Bolsa como para cada grupo)
+  const renderColumn = (g: any) => {
         const list = studentsOf(g.id);
         const nonWait = list.filter((s: any) => s.status !== 'lista_espera');
         const wait = list.filter((s: any) => s.status === 'lista_espera');
@@ -4092,8 +4087,9 @@ function Organizacion() {
               border: isOver ? '2px dashed #579172' : '1px solid #E2DDD8',
               borderTop: !g._unassigned && effGroupColor(g.color, g.name, g.programName) ? `3px solid ${effGroupColor(g.color, g.name, g.programName)}` : undefined,
               borderRadius: 10, padding: 8, alignSelf: 'stretch', opacity: dragCol === g.id ? 0.5 : 1,
-              // La columna "Sin grupo / Bolsa" queda fija (opaca) al hacer scroll horizontal para poder arrastrar alumnos a columnas de la derecha
-              ...(g._unassigned ? { position: 'sticky' as const, left: 0, zIndex: 3, boxShadow: '6px 0 12px -2px rgba(0,0,0,0.22)' } : {}),
+              // La columna "Sin grupo / Bolsa" se renderiza FUERA del scroll horizontal (caja propia a la izquierda),
+              // así es imposible que se solape con las columnas de grupos. Tiene su propio scroll vertical.
+              ...(g._unassigned ? { overflowY: 'auto' as const, boxShadow: '6px 0 12px -2px rgba(0,0,0,0.18)' } : {}),
             }}>
             <div style={{
                 // Cabecera fija arriba (sticky-top) y opaca: el nombre del grupo sigue visible al hacer scroll vertical
@@ -4161,7 +4157,19 @@ function Organizacion() {
             </div>
           </div>
         );
-      })}
+  };
+
+  const kanban = (
+    // La Bolsa va en su PROPIA caja a la izquierda (fuera del scroll horizontal): imposible que las
+    // columnas de grupos se solapen con ella. Los grupos hacen scroll en la caja derecha.
+    <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', maxHeight: '72vh' }}>
+      {renderColumn(columns[0])}
+      <div style={{ overflow: 'auto', flex: 1, minWidth: 0 }}>
+        {data.groups.length === 0 && !loading
+          ? <Empty description="No hay grupos en este servicio. Créalos en Grupos." />
+          : <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', width: 'max-content', paddingBottom: 8 }}>
+              {data.groups.map(renderColumn)}
+            </div>}
       </div>
     </div>
   );

@@ -4084,12 +4084,12 @@ function Organizacion() {
             onDrop={() => { if (dragCol) reorderTo(g.id); else if (dragId) move(dragId, g.id); setDragId(null); setDragCol(null); setOverCol(null); }}
             style={{
               minWidth: 158, maxWidth: 158, flexShrink: 0,
-              background: g._unassigned ? '#fbf7ff' : (pastel(effGroupColor(g.color, g.name, g.programName), 0.85) || '#fff'),
+              background: g._unassigned ? '#ece1fb' : (pastel(effGroupColor(g.color, g.name, g.programName), 0.85) || '#fff'),
               border: isOver ? '2px dashed #579172' : '1px solid #E2DDD8',
               borderTop: !g._unassigned && effGroupColor(g.color, g.name, g.programName) ? `3px solid ${effGroupColor(g.color, g.name, g.programName)}` : undefined,
               borderRadius: 10, padding: 8, alignSelf: 'stretch', opacity: dragCol === g.id ? 0.5 : 1,
-              // La columna "Sin grupo / Bolsa" queda fija al hacer scroll horizontal para poder arrastrar alumnos a columnas de la derecha
-              ...(g._unassigned ? { position: 'sticky' as const, left: 0, zIndex: 3, boxShadow: '4px 0 10px rgba(0,0,0,0.07)' } : {}),
+              // La columna "Sin grupo / Bolsa" queda fija (opaca) al hacer scroll horizontal para poder arrastrar alumnos a columnas de la derecha
+              ...(g._unassigned ? { position: 'sticky' as const, left: 0, zIndex: 5, boxShadow: '6px 0 12px -2px rgba(0,0,0,0.22)' } : {}),
             }}>
             <div style={{ marginBottom: 8 }}
               draggable={!g._unassigned}

@@ -1,0 +1,50 @@
+/* Mismo sistema tipográfico que MW Panel: Lora (display) + Plus Jakarta Sans (UI) */
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --mw-bg: #FAFAF8;
+  --mw-surface: #FFFFFF;
+  --mw-text: #1E1E30;
+  --mw-text-muted: #9B9BAB;
+  --mw-border: #E2DDD8;
+  --mw-border-light: #EDE9E4;
+  --mw-primary: #579172;
+  --mw-info: #2C5F8A;
+  --mw-font-display: 'Lora', Georgia, 'Times New Roman', serif;
+  --mw-font-ui: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+body {
+  font-family: var(--mw-font-ui);
+  font-size: 14px; line-height: 1.6;
+  background-color: var(--mw-bg); color: var(--mw-text);
+  min-height: 100vh; margin: 0;
+}
+
+/* Encabezados con Lora (display), igual que MW Panel */
+h1, h2, h3, h4,
+.ant-typography h1, .ant-typography h2, .ant-typography h3, .ant-typography h4,
+.ant-typography.ant-typography-h1, .ant-typography.ant-typography-h2,
+.ant-typography.ant-typography-h3, .ant-typography.ant-typography-h4,
+h1.ant-typography, h2.ant-typography, h3.ant-typography, h4.ant-typography {
+  font-family: var(--mw-font-display);
+  letter-spacing: -0.015em;
+  color: var(--mw-text);
+}
+
+/* Scrollbar fino como MW Panel */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--mw-border); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--mw-text-muted); }
+
+/* Layout / header / sider afinados como MW Panel */
+.ant-layout { background: var(--mw-bg) !important; }
+.ant-layout-header {
+  background: var(--mw-surface) !important;
+  border-bottom: 1px solid var(--mw-border-light) !important;
+  box-shadow: none !important;
+}
+.ant-layout-sider { border-right: 1px solid var(--mw-border-light) !important; }

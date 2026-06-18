@@ -1,0 +1,23 @@
+# Dependencias y builds
+node_modules/
+dist/
+frontend-dist/
+build/
+
+# Logs y temporales
+*.log
+npm-debug.log*
+.DS_Store
+1224
+
+# Secretos — NO publicar
+.env
+backend/.env
+*.env.local
+
+# Datos personales / copias — NO publicar
+backups/
+*.xlsx
+*.pem
+*.key
+*credentials*.json

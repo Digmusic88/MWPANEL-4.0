@@ -51,6 +51,7 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
   const [families, setFamilies] = useState<any[]>([]);
   const [enrollments, setEnrollments] = useState<any[]>([]);   // servicios inscritos (modo edición)
   const [addSvc, setAddSvc] = useState<string | undefined>();  // servicio a añadir (modo edición)
+  const [editUpdatedAt, setEditUpdatedAt] = useState<string | null>(null);
 
   const enrollmentsWatch: any[] = Form.useWatch('enrollments', form) || [];
   const matriculaAmountWatch = Form.useWatch('matriculaAmount', form);
@@ -82,6 +83,7 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
     if (editingStudentId) {
       api.get(`/students/${editingStudentId}/full`).then(r => {
         const d = r.data;
+        setEditUpdatedAt(d.updatedAt || null);
         setIsMwPanel(!!d.mwpanelStudentId);
         setPendingItems(d.pendingItems || []);
         setEnrollments(d.enrollments || []);
@@ -159,6 +161,7 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
     if (!editingStudentId) return;
     try {
       const { data } = await api.get(`/students/${editingStudentId}/full`);
+      setEditUpdatedAt(data.updatedAt || null);
       setEnrollments(data.enrollments || []);
       setPendingItems(data.pendingItems || []);
       onSaved(); // refresca el listado de Alumnos del fondo
@@ -212,6 +215,7 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
       if (editingStudentId) {
         // Modo edición: actualizar alumno + tutores
         await api.patch(`/students/${editingStudentId}/full`, {
+          expectedUpdatedAt: editUpdatedAt ?? undefined,
           student: {
             firstName: values.firstName,
             lastName: values.lastName,
@@ -281,7 +285,10 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
       onClose();
       onSaved();
     } catch (e: any) {
-      message.error(e?.response?.data?.message || 'Error al guardar');
+      // 409 VERSION_CONFLICT: the response interceptor in api.ts already shows the warning; skip generic error.
+      if (e?.response?.status !== 409) {
+        message.error(e?.response?.data?.message || 'Error al guardar');
+      }
     } finally {
       setSaving(false);
     }

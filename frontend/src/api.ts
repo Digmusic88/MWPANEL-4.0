@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { message } from 'antd';
 export const api = axios.create({ baseURL: '/api/secretaria' });
 api.interceptors.request.use((c) => {
   const t = localStorage.getItem('secretaria_token');
@@ -23,3 +24,13 @@ export function endImpersonation() {
   localStorage.removeItem(ADMIN_KEY);
 }
 export function isImpersonating() { return !!localStorage.getItem(ADMIN_KEY); }
+
+api.interceptors.response.use(
+  (r) => r,
+  (error) => {
+    if (error?.response?.status === 409 && error.response.data?.code === 'VERSION_CONFLICT') {
+      message.warning('Otro usuario cambio este registro mientras lo editabas. Recarga para ver la version actual antes de guardar.');
+    }
+    return Promise.reject(error);
+  },
+);

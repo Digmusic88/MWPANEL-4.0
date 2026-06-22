@@ -1102,7 +1102,8 @@ function Tarifas() {
 }
 
 // ----------------------------- GRUPOS -----------------------------
-function Grupos() {
+function Grupos({ user }: { user?: any }) {
+  const isAdmin = user?.secretariaRoles?.includes('secretaria_admin');
   const [rows, setRows] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
   const [programs, setPrograms] = useState<any[]>([]);
@@ -1113,6 +1114,13 @@ function Grupos() {
   const [form] = Form.useForm();
   const load = async () => { const { data } = await api.get('/catalog/groups'); setRows(data); };
   useLiveQuery(['groups'], load);
+  const remove = async (id: string) => {
+    try {
+      const { data } = await api.delete(`/catalog/groups/${id}`);
+      if (data?.ok === false) message.warning(data.error || 'No se pudo borrar el grupo');
+      else { message.success('Grupo eliminado'); load(); }
+    } catch { message.error('Error al eliminar'); }
+  };
   useEffect(() => {
     load();
     api.get('/catalog/services').then(r => setServices(r.data));
@@ -1186,7 +1194,18 @@ function Grupos() {
             {
               title: '',
               render: (_: any, r: any) => (
-                <Button size="small" onClick={() => openEdit(r)}>Editar</Button>
+                <Space>
+                  <Button size="small" onClick={() => openEdit(r)}>Editar</Button>
+                  {isAdmin && (
+                    <Popconfirm
+                      title="¿Borrar grupo?"
+                      description="Si no tiene alumnos, se elimina junto con sus franjas de horario y apartados de cuaderno."
+                      okText="Borrar" cancelText="Cancelar" okButtonProps={{ danger: true }}
+                      onConfirm={() => remove(r.id)}>
+                      <Button size="small" danger>Borrar</Button>
+                    </Popconfirm>
+                  )}
+                </Space>
               ),
             },
           ]} />
@@ -2041,7 +2060,7 @@ function Configuracion({ user }: { user?: any }) {
   const tabs: any[] = [];
   if (isAdmin) tabs.push({ key: 'general', label: 'Curso y centro', children: cursoYCentro });
   tabs.push(
-    { key: 'grupos', label: 'Grupos', children: <Grupos /> },
+    { key: 'grupos', label: 'Grupos', children: <Grupos user={user} /> },
     { key: 'programas', label: 'Programas', children: <Programas /> },
     { key: 'tarifas', label: 'Tarifas', children: <Tarifas /> },
     { key: 'profesores', label: 'Profesores', children: <Profesores /> },
@@ -4830,7 +4849,7 @@ export default function App() {
           {safeView === 'morosidad' && <Morosidad />}
           {safeView === 'remesas' && <Remesas />}
           {safeView === 'documentacion' && <Documentacion />}
-          {safeView === 'grupos' && <Grupos />}
+          {safeView === 'grupos' && <Grupos user={user} />}
           {safeView === 'apoyo' && <ApoyoBoard />}
           {safeView === 'profesores' && <Profesores />}
           {safeView === 'asistencia' && <Asistencia user={user} />}

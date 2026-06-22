@@ -146,6 +146,24 @@ export class CatalogController {
     return group;
   }
 
+  @Delete('groups/:id') @Roles('secretaria_admin')
+  async deleteGroup(@Param('id') id: string) {
+    // Bloquea si el grupo tiene alumnos matriculados (enrollments.group_id es SET NULL,
+    // asi que un DELETE crudo no fallaria -> comprobacion explicita).
+    const rows = await this.ds.query(
+      `SELECT count(*)::int AS n FROM secretaria.enrollments WHERE group_id = $1`,
+      [id],
+    );
+    const n: number = rows[0]?.n ?? 0;
+    if (n > 0) {
+      return { ok: false, error: `No se puede borrar: el grupo tiene ${n} alumno(s). Quitalos del grupo primero.` };
+    }
+    // Grupo vacio: la cascada elimina sus franjas de horario, tarifas de grupo y
+    // apartados/entradas de cuaderno (irrelevantes sin alumnos).
+    await this.groups.delete(id);
+    return { ok: true };
+  }
+
   private async upsertGroupFees(
     groupId: string,
     academicYearId: string,

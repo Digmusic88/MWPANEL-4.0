@@ -22,6 +22,7 @@ export class DanzaController {
   @Post('tiers') @Roles('secretaria_admin','secretaria_staff','direccion')
   async setTier(@Body() b: { groupId?: string | null; days: number; amount: number }) {
     if (!b.days || b.days < 1) return { ok: false, error: 'Nº de días inválido' };
+    if (b.amount == null || b.amount <= 0) return { ok: false, error: 'Importe inválido' };
     // upsert manual (índices parciales no admiten ON CONFLICT con NULL fácilmente)
     if (b.groupId) {
       await this.ds.query(`DELETE FROM secretaria.danza_fee_tiers WHERE group_id=$1 AND days=$2`, [b.groupId, b.days]);
@@ -48,7 +49,7 @@ export class DanzaController {
     const groups = await this.ds.query(`
       SELECT g.id, g.name, g.room, g.color, g.bills_maillot AS "billsMaillot",
         COALESCE((SELECT json_agg(json_build_object('weekday', ss.weekday, 'startTime', to_char(ss.start_time,'HH24:MI'), 'room', ss.room) ORDER BY ss.weekday, ss.start_time)
-                  FROM secretaria.schedule_slots ss WHERE ss.group_id=g.id), '[]') AS schedule
+                  FROM secretaria.schedule_slots ss WHERE ss.group_id=g.id), '[]'::json) AS schedule
       FROM secretaria.groups g JOIN secretaria.programs p ON p.id=g.program_id
       WHERE g.academic_year_id=$1 AND p.service_id=$2 ORDER BY g.sort_order, g.name`, [yearId, svcId]);
     const students = await this.ds.query(`
@@ -57,7 +58,7 @@ export class DanzaController {
         secretaria.fn_resolve_danza_monthly(e.id) AS monthly,
         secretaria.fn_resolve_danza_maillot(e.id) AS maillot,
         COALESCE((SELECT json_agg(json_build_object('id', da.id, 'groupId', da.group_id, 'weekday', da.weekday, 'startTime', to_char(da.start_time,'HH24:MI'), 'room', da.room) ORDER BY da.weekday, da.start_time)
-                  FROM secretaria.danza_assignments da WHERE da.enrollment_id=e.id), '[]') AS assignments
+                  FROM secretaria.danza_assignments da WHERE da.enrollment_id=e.id), '[]'::json) AS assignments
       FROM secretaria.enrollments e
       JOIN secretaria.students st ON st.id=e.student_id
       LEFT JOIN secretaria.v_alumnos_escuela va ON va.mwpanel_student_id=st.mwpanel_student_id

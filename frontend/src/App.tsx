@@ -4531,8 +4531,11 @@ function DanzaBoard() {
 
   // asignar (arrastrar alumno del pool a una franja de grupo) o quitar
   const assign = async (enrollmentId: string, g: any, slot: any) => {
-    try { await api.post('/danza/assign', { enrollmentId, groupId: g.id, weekday: slot.weekday, startTime: slot.startTime, room: slot.room || g.room }); load(); }
-    catch { message.error('No se pudo asignar'); }
+    try {
+      const { data } = await api.post('/danza/assign', { enrollmentId, groupId: g.id, weekday: slot.weekday, startTime: slot.startTime, room: slot.room || g.room });
+      if (data?.ok === false) { message.warning(data.error || 'No se pudo asignar'); return; }
+      load();
+    } catch { message.error('No se pudo asignar'); }
   };
   const removeAssign = async (assignmentId: string) => {
     try { await api.delete(`/danza/assignment/${assignmentId}`); load(); }

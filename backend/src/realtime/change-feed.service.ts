@@ -9,17 +9,22 @@ export class ChangeFeedService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger('ChangeFeed');
   private client: Client | null = null;
   private stopped = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private gateway: RealtimeGateway) {}
 
   async onModuleInit() { await this.connect(); }
-  async onModuleDestroy() { this.stopped = true; await this.client?.end().catch(() => {}); }
+  async onModuleDestroy() {
+    this.stopped = true;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    await this.client?.end().catch(() => {});
+  }
 
   private async connect() {
     if (this.stopped) return;
     this.client = new Client({
       host: process.env.DB_HOST || 'mw-panel-db-prod',
-      port: parseInt(process.env.DB_PORT || '5432'),
+      port: parseInt(process.env.DB_PORT || '5432', 10),
       user: process.env.DB_USER || 'mwpanel',
       password: process.env.DB_PASS,
       database: process.env.DB_NAME || 'mwpanel',
@@ -44,8 +49,10 @@ export class ChangeFeedService implements OnModuleInit, OnModuleDestroy {
 
   private reconnect() {
     if (this.stopped) return;
-    this.client?.removeAllListeners();
+    const old = this.client;
     this.client = null;
-    setTimeout(() => this.connect(), 3000);
+    old?.removeAllListeners();
+    old?.end().catch(() => {});
+    this.reconnectTimer = setTimeout(() => this.connect(), 3000);
   }
 }

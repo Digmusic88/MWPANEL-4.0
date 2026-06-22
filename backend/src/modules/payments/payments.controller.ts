@@ -152,7 +152,8 @@ export class PaymentsController {
     const students = await this.ds.query(`
       SELECT e.id AS "enrollmentId", st.family_id AS "familyId",
              COALESCE(NULLIF(TRIM(COALESCE(st.first_name,'')||' '||COALESCE(st.last_name,'')),''), va.first_name||' '||va.last_name) AS "studentName",
-             sv.name AS "serviceName", secretaria.fn_resolve_monthly_fee(e.id) AS "monthlyFee",
+             sv.name AS "serviceName", e.group_id AS "groupId", g.name AS "groupName",
+             secretaria.fn_resolve_monthly_fee(e.id) AS "monthlyFee",
              (SELECT count(*)::int FROM secretaria.danza_assignments da WHERE da.enrollment_id=e.id) AS "danzaDays",
              COALESCE(pr.bills_matricula,false) AS "billsMatricula", COALESCE(pr.bills_material,false) AS "billsMaterial",
              pr.month_billing AS "monthBilling",

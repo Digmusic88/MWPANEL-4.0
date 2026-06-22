@@ -1794,8 +1794,15 @@ function Pagos() {
   const [genMonth, setGenMonth] = useState<string | undefined>();
   const [genCourseOpen, setGenCourseOpen] = useState(false);
   const [payCell, setPayCell] = useState<any>(null);
+  const [search, setSearch] = useState('');
   const [payForm] = Form.useForm();
   const activeYear = () => years.find(y => y.isActive);
+  // Filtro propio de Pagos: alumno + servicio + grupo + programa (acento-insensible)
+  const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const matchSearch = (r: any) => {
+    if (!search) return true;
+    return norm([r.studentName, r.serviceName, r.groupName, r.programName].join(' ')).includes(norm(search));
+  };
 
   const load = async () => {
     const y = activeYear(); if (!y) return;
@@ -1896,6 +1903,8 @@ function Pagos() {
   const cols: any[] = [
     { title: 'Alumno', dataIndex: 'studentName', fixed: 'left', width: 190,
       render: (n: any, r: any) => <span>{n}{r.danzaDays > 0 && <Tag color="purple" style={{ marginLeft: 6 }}>{r.danzaDays} {r.danzaDays === 1 ? 'día' : 'días'}</Tag>}</span> },
+    { title: 'Grupo', dataIndex: 'groupName', fixed: 'left', width: 130,
+      render: (g: any, r: any) => r._discount ? null : (g ? <Tag color="geekblue" style={{ margin: 0 }}>{g}</Tag> : <span style={{ color: '#bbb' }}>(sin grupo)</span>) },
     ...(data.columns || []).map((col: any) => ({
       title: col.label, key: col.key, align: 'center',
       width: (col.concept === 'matricula' || col.concept === 'material') ? 80 : 56,
@@ -1922,6 +1931,7 @@ function Pagos() {
       </Ayuda>
       <Card>
         <Space style={{ marginBottom: 12 }} wrap>
+          <Input allowClear prefix={<SearchOutlined />} placeholder="Buscar alumno, servicio, grupo…" style={{ width: 260 }} value={search} onChange={e => setSearch(e.target.value)} />
           <Text>Servicio:</Text>
           <Select allowClear placeholder="Todos" style={{ width: 180 }} value={filterService} onChange={setFilterService} options={services.map(s => ({ value: s.id, label: s.name }))} />
           <Button type="primary" onClick={() => setGenCourseOpen(true)}>Generar recibos del curso</Button>
@@ -1931,7 +1941,7 @@ function Pagos() {
           <Button onClick={() => { setGenMonth(undefined); setGenOpen(true); }}>Generar recibos del mes</Button>
           <Button onClick={load}>Actualizar</Button>
         </Space>
-        <SearchableTable rowKey="enrollmentId" dataSource={[...(data.rows || []), ...(data.discountRows || []).map((d: any) => ({ enrollmentId: 'disc-' + d.familyId, _discount: true, studentName: `Descuento hermanos · ${d.familyName}`, monthly: d.monthly }))]} loading={loading} columns={cols} pagination={{ pageSize: 20 }} scroll={{ x: 'max-content' }} size="small" />
+        <SearchableTable rowKey="enrollmentId" dataSource={[...(data.rows || []), ...(data.discountRows || []).map((d: any) => ({ enrollmentId: 'disc-' + d.familyId, _discount: true, studentName: `Descuento hermanos · ${d.familyName}`, monthly: d.monthly }))].filter(matchSearch)} loading={loading} columns={cols} pagination={{ pageSize: 20 }} scroll={{ x: 'max-content' }} size="small" />
       </Card>
 
       <Modal title="Generar recibos del curso completo" open={genCourseOpen} onCancel={() => setGenCourseOpen(false)} onOk={doGenerateCourse} okText="Generar curso">

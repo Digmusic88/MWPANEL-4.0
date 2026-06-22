@@ -52,8 +52,8 @@ export class DanzaController {
                   FROM secretaria.schedule_slots ss WHERE ss.group_id=g.id), '[]'::json) AS schedule
       FROM secretaria.groups g JOIN secretaria.programs p ON p.id=g.program_id
       WHERE g.academic_year_id=$1 AND p.service_id=$2 ORDER BY g.sort_order, g.name`, [yearId, svcId]);
-    const students = await this.ds.query(`
-      SELECT e.id AS "enrollmentId",
+    const studentsRaw = await this.ds.query(`
+      SELECT e.id AS "enrollmentId", e.status, e.notes AS comment,
         COALESCE(NULLIF(TRIM(COALESCE(st.first_name,'')||' '||COALESCE(st.last_name,'')),''), va.first_name||' '||va.last_name) AS "studentName",
         secretaria.fn_resolve_danza_monthly(e.id) AS monthly,
         secretaria.fn_resolve_danza_maillot(e.id) AS maillot,
@@ -64,12 +64,8 @@ export class DanzaController {
       LEFT JOIN secretaria.v_alumnos_escuela va ON va.mwpanel_student_id=st.mwpanel_student_id
       WHERE e.academic_year_id=$1 AND e.service_id=$2 AND e.status IN ('matriculado','preinscrito','lista_espera','pendiente')
       ORDER BY "studentName"`, [yearId, svcId]);
-    const withDays = students.map((s: any) => ({ ...s, totalDays: (s.assignments || []).length }));
-    return {
-      groups,
-      students: withDays.filter((s: any) => s.totalDays > 0),
-      pool: withDays.filter((s: any) => s.totalDays === 0).map((s: any) => ({ enrollmentId: s.enrollmentId, studentName: s.studentName })),
-    };
+    const students = studentsRaw.map((s: any) => ({ ...s, totalDays: (s.assignments || []).length }));
+    return { groups, students };
   }
 
   @Post('assign') @Roles('secretaria_admin','secretaria_staff','direccion')
@@ -96,6 +92,14 @@ export class DanzaController {
       const rest = await this.ds.query(`SELECT group_id FROM secretaria.danza_assignments WHERE enrollment_id=$1 LIMIT 1`, [enr]);
       await this.ds.query(`UPDATE secretaria.enrollments SET group_id=$2 WHERE id=$1`, [enr, rest[0]?.group_id || null]);
     }
+    return { ok: true };
+  }
+
+  @Delete('assignments') @Roles('secretaria_admin','secretaria_staff','direccion')
+  async delGroupAssignments(@Query('enrollmentId') enrollmentId: string, @Query('groupId') groupId: string) {
+    await this.ds.query(`DELETE FROM secretaria.danza_assignments WHERE enrollment_id=$1 AND group_id=$2`, [enrollmentId, groupId]);
+    const rest = await this.ds.query(`SELECT group_id FROM secretaria.danza_assignments WHERE enrollment_id=$1 LIMIT 1`, [enrollmentId]);
+    await this.ds.query(`UPDATE secretaria.enrollments SET group_id=$2 WHERE id=$1`, [enrollmentId, rest[0]?.group_id || null]);
     return { ok: true };
   }
 }

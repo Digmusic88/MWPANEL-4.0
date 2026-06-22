@@ -629,28 +629,34 @@ export class StudentsController {
     if (!st) throw new NotFoundException('Alumno no encontrado');
 
     if (b.scope === 'familia') {
-      await this.ds.query(
-        `UPDATE secretaria.bank_accounts SET is_active=false WHERE family_id=$1 AND student_id IS NULL AND is_active`,
-        [st.familyId]);
-      await this.ds.query(`
-        INSERT INTO secretaria.bank_accounts(family_id, student_id, iban_encrypted, iban_last4, holder_name, sepa_mandate_ref, sepa_mandate_date, is_active)
-        VALUES ($1::uuid, NULL, pgp_sym_encrypt($2,$3), $4, $5,
-                'MAND-'||substr(replace($1::text,'-',''),1,8)||'-'||to_char(now(),'YYYYMMDD'),
-                now()::date, true)`,
-        [st.familyId, iban, SECRETARIA_CRYPTO_KEY, last4, b.holderName || null]);
+      await this.ds.transaction(async (m) => {
+        await m.query(
+          `UPDATE secretaria.bank_accounts SET is_active=false WHERE family_id=$1 AND student_id IS NULL AND is_active`,
+          [st.familyId]);
+        await m.query(`
+          INSERT INTO secretaria.bank_accounts(family_id, student_id, iban_encrypted, iban_last4, holder_name, sepa_mandate_ref, sepa_mandate_date, is_active)
+          VALUES ($1::uuid, NULL, pgp_sym_encrypt($2,$3), $4, $5,
+                  'MAND-'||substr(replace($1::text,'-',''),1,8)||'-'||to_char(now(),'YYYYMMDD'),
+                  now()::date, true)`,
+          [st.familyId, iban, SECRETARIA_CRYPTO_KEY, last4, b.holderName || null]);
+      });
     } else {
-      await this.ds.query(
-        `UPDATE secretaria.bank_accounts SET is_active=false WHERE student_id=$1 AND is_active`, [id]);
-      await this.ds.query(`
-        INSERT INTO secretaria.bank_accounts(family_id, student_id, iban_encrypted, iban_last4, holder_name, sepa_mandate_ref, sepa_mandate_date, is_active)
-        VALUES ($1::uuid, $2::uuid, pgp_sym_encrypt($3,$4), $5, $6, NULL, NULL, true)`,
-        [st.familyId, id, iban, SECRETARIA_CRYPTO_KEY, last4, b.holderName || null]);
+      await this.ds.transaction(async (m) => {
+        await m.query(
+          `UPDATE secretaria.bank_accounts SET is_active=false WHERE student_id=$1 AND is_active`, [id]);
+        await m.query(`
+          INSERT INTO secretaria.bank_accounts(family_id, student_id, iban_encrypted, iban_last4, holder_name, sepa_mandate_ref, sepa_mandate_date, is_active)
+          VALUES ($1::uuid, $2::uuid, pgp_sym_encrypt($3,$4), $5, $6, NULL, NULL, true)`,
+          [st.familyId, id, iban, SECRETARIA_CRYPTO_KEY, last4, b.holderName || null]);
+      });
     }
     return { ok: true, ibanLast4: last4, scope: b.scope };
   }
 
   @Delete(':id/bank-override') @Roles('secretaria_admin','secretaria_staff')
   async deleteBankOverride(@Param('id') id: string) {
+    const [st] = await this.ds.query(`SELECT family_id FROM secretaria.students WHERE id=$1`, [id]);
+    if (!st) throw new NotFoundException('Alumno no encontrado');
     await this.ds.query(`UPDATE secretaria.bank_accounts SET is_active=false WHERE student_id=$1 AND is_active`, [id]);
     return { ok: true };
   }

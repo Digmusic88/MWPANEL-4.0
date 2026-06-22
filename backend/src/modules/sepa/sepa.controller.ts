@@ -88,13 +88,19 @@ export class SepaController {
     const iban = normalizeIban(b.iban);
     if (!isValidIban(iban)) throw new BadRequestException('IBAN no válido');
     const last4 = iban.slice(-4);
-    const r = await this.ds.query(`
-      INSERT INTO secretaria.bank_accounts(family_id, iban_encrypted, iban_last4, holder_name, sepa_mandate_ref, sepa_mandate_date, is_active)
-      VALUES ($1::uuid, pgp_sym_encrypt($2,$3), $4, $5,
-              COALESCE($6, 'MAND-'||substr(replace($1::text,'-',''),1,8)||'-'||to_char(now(),'YYYYMMDD')),
-              COALESCE($7::date, now()::date), true) RETURNING id`,
-      [familyId, iban, CRYPTO_KEY, last4, b.holderName || null, b.mandateRef || null, b.mandateDate || null]);
-    return { ok: true, id: r[0].id, ibanLast4: last4 };
+    const id = await this.ds.transaction(async (m) => {
+      await m.query(
+        `UPDATE secretaria.bank_accounts SET is_active=false WHERE family_id=$1::uuid AND student_id IS NULL AND is_active`,
+        [familyId]);
+      const r = await m.query(`
+        INSERT INTO secretaria.bank_accounts(family_id, iban_encrypted, iban_last4, holder_name, sepa_mandate_ref, sepa_mandate_date, is_active)
+        VALUES ($1::uuid, pgp_sym_encrypt($2,$3), $4, $5,
+                COALESCE($6, 'MAND-'||substr(replace($1::text,'-',''),1,8)||'-'||to_char(now(),'YYYYMMDD')),
+                COALESCE($7::date, now()::date), true) RETURNING id`,
+        [familyId, iban, CRYPTO_KEY, last4, b.holderName || null, b.mandateRef || null, b.mandateDate || null]);
+      return r[0].id;
+    });
+    return { ok: true, id, ibanLast4: last4 };
   }
 
   @Delete('bank-accounts/:id') @Roles('secretaria_admin','secretaria_staff')

@@ -4149,7 +4149,8 @@ function Organizacion() {
     finally { setLoading(false); }
   };
   useLiveQuery(['enrollments', 'groups', 'students'], load);
-  useEffect(() => { api.get('/catalog/services').then(r => { setServices(r.data); const ing = r.data.find((s: any) => s.code === 'INGLES'); setServiceId(ing?.id || r.data[0]?.id); }); }, []);
+  // Danza NO se organiza aquí (tiene su propia sección por días); el kanban es para servicios de grupo único.
+  useEffect(() => { api.get('/catalog/services').then(r => { const svc = r.data.filter((s: any) => s.code !== 'DANZA'); setServices(svc); const ing = svc.find((s: any) => s.code === 'INGLES'); setServiceId(ing?.id || svc[0]?.id); }); }, []);
   useEffect(() => { if (serviceId) load(); }, [serviceId]);
 
   const move = async (enrollmentId: string, targetGroupId: string | null) => {
@@ -4527,7 +4528,7 @@ function DanzaBoard() {
   };
   useEffect(() => { api.get('/catalog/years').then(r => setYears(r.data)); }, []);
   useEffect(() => { if (years.length) load(); }, [years]);
-  useLiveQuery(['enrollments', 'groups'], load);
+  useLiveQuery(['enrollments', 'groups', 'danza'], load);
 
   // asignar (arrastrar alumno del pool a una franja de grupo) o quitar
   const assign = async (enrollmentId: string, g: any, slot: any) => {

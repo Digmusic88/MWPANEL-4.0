@@ -33,6 +33,8 @@ const TABLE_TO_TOPIC: Record<string, ChangeTopic> = {
   raffle_campaigns: 'raffles',
   raffle_books: 'raffles',
   taper_usage: 'taper',
+  danza_assignments: 'danza',
+  danza_fee_tiers: 'danza',
 };
 
 export const ALL_TOPICS: readonly string[] = Array.from(new Set(Object.values(TABLE_TO_TOPIC)));

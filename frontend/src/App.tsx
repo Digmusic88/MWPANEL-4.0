@@ -746,6 +746,14 @@ function FichaAlumno({ studentId, open, onClose }: { studentId?: string; open: b
   const [data, setData] = useState<any>(null);
   const [mock, setMock] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [bank, setBank] = useState<any>(null);
+  const [bankForm] = Form.useForm();
+  const loadBank = async () => {
+    if (!studentId) return;
+    const { data } = await api.get(`/students/${studentId}/bank`);
+    setBank(data);
+    bankForm.resetFields();
+  };
   useEffect(() => {
     if (!open || !studentId) return;
     setData(null); setMock(null); setLoading(true);
@@ -754,6 +762,24 @@ function FichaAlumno({ studentId, open, onClose }: { studentId?: string; open: b
       if (r.data?.student?.mockUserId) { try { const m = await api.get(`/mocks/results/${r.data.student.mockUserId}`); setMock(m.data); } catch {} }
     }).finally(() => setLoading(false));
   }, [open, studentId]);
+  useEffect(() => { if (open && studentId) loadBank(); }, [open, studentId]);
+  const saveBank = async (v: any) => {
+    try {
+      const r = await api.post(`/students/${studentId}/bank`, {
+        iban: v.iban, holderName: v.holderName,
+        scope: v.onlyThisStudent ? 'alumno' : 'familia',
+      });
+      message.success(r.data.scope === 'alumno' ? 'Cuenta propia del alumno guardada' : 'Cuenta de la familia guardada (compartida con los hermanos)');
+      loadBank();
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || 'No se pudo guardar el IBAN');
+    }
+  };
+  const removeOverride = async () => {
+    await api.delete(`/students/${studentId}/bank-override`);
+    message.success('Override eliminado; vuelve a usarse la cuenta de la familia');
+    loadBank();
+  };
   const s = data?.student;
   const at = data?.attendance, tk = data?.tasks;
   const attPct = at?.total ? Math.round(((at.presente + at.retraso) / at.total) * 100) : null;
@@ -847,6 +873,36 @@ function FichaAlumno({ studentId, open, onClose }: { studentId?: string; open: b
         {card('Documentación', data.documents.length ? (
           <Space wrap>{data.documents.map((d: any, i: number) => <Tag key={i} color={d.status === 'recibido' ? 'green' : d.status === 'caducado' ? 'red' : 'default'}>{d.document}: {d.status}</Tag>)}</Space>
         ) : <Text type="secondary">Sin documentos registrados</Text>)}
+
+        {card('Domiciliación (número de cuenta)', (
+          <div style={{ marginTop: 0 }}>
+            <div style={{ marginBottom: 8 }}>
+              {bank?.familyAccount
+                ? <span>Cuenta de la familia: <b>····{bank.familyAccount.ibanLast4}</b> <Tag color="blue">compartida con los hermanos</Tag></span>
+                : <span style={{ color: '#999' }}>Sin cuenta de familia registrada</span>}
+            </div>
+            {bank?.override && (
+              <Alert style={{ marginBottom: 8 }} type="warning" showIcon
+                message={<span>Cuenta propia de este alumno: <b>····{bank.override.ibanLast4}</b> (pago especial)</span>}
+                action={<Button size="small" onClick={removeOverride}>Volver a usar la de la familia</Button>} />
+            )}
+            <Form form={bankForm} layout="vertical" onFinish={saveBank}>
+              <Form.Item name="iban" label="IBAN" rules={[{ required: true, message: 'Introduce el IBAN' }]}>
+                <Input autoComplete="off" placeholder="ES## #### #### #### #### ####" />
+              </Form.Item>
+              <Form.Item name="holderName" label="Titular (opcional)">
+                <Input autoComplete="off" placeholder="Nombre del titular de la cuenta" />
+              </Form.Item>
+              <Form.Item name="onlyThisStudent" valuePropName="checked">
+                <Checkbox>Solo para este alumno (pago especial)</Checkbox>
+              </Form.Item>
+              <Button type="primary" htmlType="submit">Guardar cuenta</Button>
+            </Form>
+            <Typography.Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
+              La remesa SEPA cobra a la cuenta de la familia. La cuenta propia es informativa, para un pago o transferencia especial de este alumno.
+            </Typography.Text>
+          </div>
+        ))}
       </>)}
     </Drawer>
   );

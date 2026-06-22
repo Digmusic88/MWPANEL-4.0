@@ -105,6 +105,17 @@ export class PaymentsController {
         RETURNING id`, [b.academicYearId, b.serviceId || null]);
       total += r.length;
     }
+    // Maillot (Danza): una vez, si la matrícula tiene algún grupo con bills_maillot
+    await this.ds.query(`
+      INSERT INTO secretaria.charges(enrollment_id, period, concept, amount_due, status)
+      SELECT e.id, NULL, 'maillot', secretaria.fn_resolve_danza_maillot(e.id), 'pendiente'
+      FROM secretaria.enrollments e
+      JOIN secretaria.services s ON s.id=e.service_id
+      WHERE e.academic_year_id=$1 AND e.status='matriculado' AND s.code='DANZA'
+        AND secretaria.fn_resolve_danza_maillot(e.id) IS NOT NULL
+        AND secretaria.fn_resolve_danza_maillot(e.id) > 0
+        AND NOT EXISTS (SELECT 1 FROM secretaria.charges c WHERE c.enrollment_id=e.id AND c.concept='maillot')`,
+      [b.academicYearId]);
     return { generated: total };
   }
 
@@ -134,6 +145,7 @@ export class PaymentsController {
     const columns = [
       { key: 'matricula', label: 'Matrícula', concept: 'matricula' },
       { key: 'material', label: 'Material', concept: 'material' },
+      { key: 'maillot', label: 'Maillot', concept: 'maillot' },
       ...months.map(m => ({ key: m.key, label: m.label, concept: 'mensualidad', period: m.key, mm: m.mm })),
     ];
 

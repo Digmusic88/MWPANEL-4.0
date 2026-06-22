@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import { api, setToken, clearToken, getToken, beginImpersonation, endImpersonation, isImpersonating } from './api';
 import { InscripcionDrawer } from './components/InscripcionDrawer';
+import { useLiveQuery } from './realtime/useLiveQuery';
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -1632,6 +1633,7 @@ function Pagos() {
       setData(data);
     } finally { setLoading(false); }
   };
+  useLiveQuery(['payments', 'enrollments'], load);
   useEffect(() => { api.get('/catalog/services').then(r => setServices(r.data)); api.get('/catalog/years').then(r => setYears(r.data)); }, []);
   useEffect(() => { if (years.length) load(); }, [years, filterService]);
 
@@ -2445,6 +2447,7 @@ function Horarios({ user }: { user?: any }) {
     try { const { data } = await api.get('/schedule', { params: { academicYearId: y.id } }); setSlots(data); }
     finally { setLoading(false); }
   };
+  useLiveQuery(['schedule_slots', 'groups'], load);
   useEffect(() => {
     api.get('/catalog/groups').then(r => setGroups(r.data));
     api.get('/catalog/years').then(r => setYears(r.data));
@@ -3366,6 +3369,7 @@ function Asistencia({ user }: { user?: any }) {
       setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollLeft = scrollRef.current.scrollWidth; }, 60);
     } finally { setLoading(false); }
   };
+  useLiveQuery(['attendance'], load);
   useEffect(() => { if (groupId && tab === 'lista') load(); }, [groupId, date, tab]);
   const cycle = (id: string) => setEdits(e => { const cur = e[id] || 'presente'; const next = ATT_ORDER[(ATT_ORDER.indexOf(cur) + 1) % ATT_ORDER.length]; return { ...e, [id]: next }; });
   const markAll = (status: string) => { const e: any = {}; grid.students.forEach((r: any) => { e[r.enrollmentId] = status; }); setEdits(e); };
@@ -3849,6 +3853,7 @@ function HorarioAulas() {
     setLoading(true);
     try { const { data } = await api.get('/schedule/grid'); setRooms(data.rooms || []); setBlocks(data.blocks || []); } finally { setLoading(false); }
   };
+  useLiveQuery(['schedule_slots', 'groups'], load);
   useEffect(() => { load(); api.get('/catalog/groups').then(r => setGroups(r.data)); api.get('/teachers').then(r => setTeachers(r.data)); }, []);
 
   const times = Array.from(new Set([...HA_DEF_TIMES, ...blocks.map(b => b.start)])).filter(Boolean).sort();
@@ -4012,6 +4017,7 @@ function Organizacion() {
     try { const { data } = await api.get('/enrollments/board', { params: { serviceId } }); setData(data); }
     finally { setLoading(false); }
   };
+  useLiveQuery(['enrollments', 'groups', 'students'], load);
   useEffect(() => { api.get('/catalog/services').then(r => { setServices(r.data); const ing = r.data.find((s: any) => s.code === 'INGLES'); setServiceId(ing?.id || r.data[0]?.id); }); }, []);
   useEffect(() => { if (serviceId) load(); }, [serviceId]);
 
@@ -4376,6 +4382,7 @@ function Tareas() {
       setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollLeft = scrollRef.current.scrollWidth; }, 60);
     } finally { setLoading(false); }
   };
+  useLiveQuery(['tareas'], load);
   useEffect(() => { if (groupId && tab === 'hoja') load(); }, [groupId, date, tab]);
   const cycle = (id: string) => setEdits(e => { const cur = e[id] || 'verde'; const next = TASK_LEVELS[(TASK_LEVELS.indexOf(cur) + 1) % 3]; return { ...e, [id]: next }; });
   const markAll = (lvl: string) => { const e: any = {}; grid.students.forEach((r: any) => e[r.enrollmentId] = lvl); setEdits(e); };

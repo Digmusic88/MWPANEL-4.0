@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { ConfigProvider } from 'antd';
 import esES from 'antd/locale/es_ES';
 import App from './App';
+import { RealtimeProvider } from './realtime/RealtimeProvider';
 import './index.css';
 
 // ─────────────────────────────────────────────────────────────────
@@ -51,7 +52,9 @@ const theme = {
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ConfigProvider locale={esES} theme={theme}>
-      <App />
+      <RealtimeProvider>
+        <App />
+      </RealtimeProvider>
     </ConfigProvider>
   </React.StrictMode>,
 );

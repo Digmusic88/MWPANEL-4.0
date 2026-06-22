@@ -1101,6 +1101,63 @@ function Tarifas() {
   );
 }
 
+// Modal: fechas de trimestre por grupo (override de academic_terms; vacío = global)
+function GroupTermsModal({ group, open, onClose }: { group: any; open: boolean; onClose: () => void }) {
+  const [terms, setTerms] = useState<any[]>([]);
+  const [edits, setEdits] = useState<Record<string, { start: string; end: string }>>({});
+  const [loading, setLoading] = useState(false);
+  const load = async () => {
+    if (!group) return;
+    setLoading(true);
+    try {
+      const { data } = await api.get('/calendar-config/group-terms', { params: { groupId: group.id } });
+      setTerms(data);
+      const e: Record<string, { start: string; end: string }> = {};
+      data.forEach((t: any) => { e[t.id] = { start: t.start, end: t.end }; });
+      setEdits(e);
+    } finally { setLoading(false); }
+  };
+  useEffect(() => { if (open) load(); }, [open, group?.id]);
+  const saveTerm = async (t: any) => {
+    const ed = edits[t.id];
+    if (!ed?.start || !ed?.end) { message.warning('Indica inicio y fin'); return; }
+    if (ed.start > ed.end) { message.warning('El inicio no puede ser posterior al fin'); return; }
+    try {
+      const { data } = await api.post('/calendar-config/group-terms', { groupId: group.id, academicTermId: t.id, startDate: ed.start, endDate: ed.end });
+      if (data?.ok === false) message.warning(data.error); else { message.success('Fechas guardadas'); load(); }
+    } catch { message.error('Error al guardar'); }
+  };
+  const resetTerm = async (t: any) => {
+    try { await api.delete('/calendar-config/group-terms', { params: { groupId: group.id, academicTermId: t.id } }); message.success('Restablecido a global'); load(); }
+    catch { message.error('Error'); }
+  };
+  return (
+    <Modal title={`Trimestres — ${group?.name || ''}`} open={open} onCancel={onClose} footer={<Button onClick={onClose}>Cerrar</Button>}>
+      <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 12 }}>
+        Ajusta las fechas de cada trimestre solo para este grupo. Si las dejas como la global, no se crea ningún cambio.
+      </Text>
+      {terms.map(t => (
+        <div key={t.id} style={{ borderBottom: '1px solid #f0f0f0', paddingBottom: 10, marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text strong>{t.name}</Text>
+            {t.overridden && <Tag color="orange">Personalizado</Tag>}
+          </div>
+          <Text type="secondary" style={{ fontSize: 12 }}>Global: {fmtDate(t.globalStart)} → {fmtDate(t.globalEnd)}</Text>
+          <Space style={{ display: 'flex', marginTop: 6 }} wrap>
+            <Input type="date" style={{ width: 150 }} value={edits[t.id]?.start || ''}
+              onChange={e => setEdits(s => ({ ...s, [t.id]: { ...s[t.id], start: e.target.value } }))} />
+            <Input type="date" style={{ width: 150 }} value={edits[t.id]?.end || ''}
+              onChange={e => setEdits(s => ({ ...s, [t.id]: { ...s[t.id], end: e.target.value } }))} />
+            <Button size="small" type="primary" onClick={() => saveTerm(t)}>Guardar</Button>
+            {t.overridden && <Button size="small" onClick={() => resetTerm(t)}>Restablecer</Button>}
+          </Space>
+        </div>
+      ))}
+      {!terms.length && !loading && <Empty description="El curso del grupo no tiene trimestres definidos" />}
+    </Modal>
+  );
+}
+
 // ----------------------------- GRUPOS -----------------------------
 function Grupos({ user }: { user?: any }) {
   const isAdmin = user?.secretariaRoles?.includes('secretaria_admin');
@@ -1111,6 +1168,7 @@ function Grupos({ user }: { user?: any }) {
   const [teachers, setTeachers] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
+  const [termsGroup, setTermsGroup] = useState<any>(null);
   const [form] = Form.useForm();
   const load = async () => { const { data } = await api.get('/catalog/groups'); setRows(data); };
   useLiveQuery(['groups'], load);
@@ -1196,6 +1254,7 @@ function Grupos({ user }: { user?: any }) {
               render: (_: any, r: any) => (
                 <Space>
                   <Button size="small" onClick={() => openEdit(r)}>Editar</Button>
+                  <Button size="small" onClick={() => setTermsGroup(r)}>Trimestres</Button>
                   {isAdmin && (
                     <Popconfirm
                       title="¿Borrar grupo?"
@@ -1272,6 +1331,7 @@ function Grupos({ user }: { user?: any }) {
           </div>
         </Form>
       </Modal>
+      <GroupTermsModal group={termsGroup} open={!!termsGroup} onClose={() => setTermsGroup(null)} />
     </div>
   );
 }

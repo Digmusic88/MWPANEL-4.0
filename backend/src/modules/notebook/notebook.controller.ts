@@ -31,7 +31,10 @@ function inferLevel(name: string): string {
 // Filtro común de día lectivo (dentro de trimestre y no día sin clase) para una columna de fecha "d"
 const CLASS_DAY_FILTER = `
   (NOT EXISTS (SELECT 1 FROM secretaria.academic_terms at2 WHERE at2.academic_year_id=g.academic_year_id)
-   OR EXISTS (SELECT 1 FROM secretaria.academic_terms at2 WHERE at2.academic_year_id=g.academic_year_id AND {D} BETWEEN at2.start_date AND at2.end_date))
+   OR EXISTS (SELECT 1 FROM secretaria.academic_terms at2
+              LEFT JOIN secretaria.group_term_dates gtd ON gtd.academic_term_id=at2.id AND gtd.group_id=g.id
+              WHERE at2.academic_year_id=g.academic_year_id
+                AND {D} BETWEEN COALESCE(gtd.start_date, at2.start_date) AND COALESCE(gtd.end_date, at2.end_date)))
   AND NOT EXISTS (SELECT 1 FROM secretaria.non_class_days nc WHERE nc.academic_year_id=g.academic_year_id AND {D} BETWEEN nc.date AND COALESCE(nc.end_date, nc.date))`;
 
 class SectionDto {

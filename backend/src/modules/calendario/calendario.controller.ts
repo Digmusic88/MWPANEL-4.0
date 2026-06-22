@@ -20,6 +20,12 @@ class NonClassDto {
   @IsOptional() @IsDateString() endDate?: string;
   @IsOptional() @IsIn(KINDS) kind?: string;
 }
+class GroupTermDto {
+  @IsUUID() groupId: string;
+  @IsUUID() academicTermId: string;
+  @IsDateString() startDate: string;
+  @IsDateString() endDate: string;
+}
 
 // Calendario escolar: trimestres (rangos lectivos) + días sin clase (festivos/puentes/descansos/vacaciones).
 @Controller('secretaria/calendar-config')
@@ -53,6 +59,50 @@ export class CalendarioController {
   @Delete('terms/:id') @Roles('secretaria_admin', 'secretaria_staff', 'direccion')
   async removeTerm(@Param('id') id: string) {
     await this.ds.query(`DELETE FROM secretaria.academic_terms WHERE id=$1`, [id]);
+    return { ok: true };
+  }
+
+  // ---- Fechas de trimestre por grupo (override; sin fila = global) ----
+  @Get('group-terms')
+  async groupTerms(@Query('groupId') groupId: string) {
+    // Trimestres del curso del grupo, con fecha efectiva (override o global) + flag.
+    return this.ds.query(`
+      SELECT at.id, at.name,
+             to_char(at.start_date,'YYYY-MM-DD') AS "globalStart",
+             to_char(at.end_date,'YYYY-MM-DD')   AS "globalEnd",
+             to_char(COALESCE(gtd.start_date, at.start_date),'YYYY-MM-DD') AS "start",
+             to_char(COALESCE(gtd.end_date,   at.end_date),'YYYY-MM-DD')   AS "end",
+             (gtd.group_id IS NOT NULL) AS "overridden"
+      FROM secretaria.academic_terms at
+      JOIN secretaria.groups g ON g.id = $1
+      LEFT JOIN secretaria.group_term_dates gtd ON gtd.academic_term_id = at.id AND gtd.group_id = g.id
+      WHERE at.academic_year_id = g.academic_year_id
+      ORDER BY at.start_date, at.sort_order`, [groupId]);
+  }
+
+  @Post('group-terms') @Roles('secretaria_admin', 'secretaria_staff', 'direccion')
+  async setGroupTerm(@Body() b: GroupTermDto) {
+    if (b.startDate > b.endDate) {
+      return { ok: false, error: 'La fecha de inicio no puede ser posterior a la de fin.' };
+    }
+    // El trimestre debe pertenecer al curso del grupo.
+    const chk = await this.ds.query(
+      `SELECT 1 FROM secretaria.academic_terms at JOIN secretaria.groups g ON g.id=$1
+        WHERE at.id=$2 AND at.academic_year_id=g.academic_year_id`, [b.groupId, b.academicTermId]);
+    if (chk.length === 0) return { ok: false, error: 'El trimestre no pertenece al curso del grupo.' };
+    await this.ds.query(
+      `INSERT INTO secretaria.group_term_dates(group_id, academic_term_id, start_date, end_date)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (group_id, academic_term_id) DO UPDATE SET start_date=$3, end_date=$4`,
+      [b.groupId, b.academicTermId, b.startDate, b.endDate]);
+    return { ok: true };
+  }
+
+  @Delete('group-terms') @Roles('secretaria_admin', 'secretaria_staff', 'direccion')
+  async clearGroupTerm(@Query('groupId') groupId: string, @Query('academicTermId') academicTermId: string) {
+    await this.ds.query(
+      `DELETE FROM secretaria.group_term_dates WHERE group_id=$1 AND academic_term_id=$2`,
+      [groupId, academicTermId]);
     return { ok: true };
   }
 

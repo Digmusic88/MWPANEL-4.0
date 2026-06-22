@@ -69,7 +69,10 @@ export class EventosController {
       WHERE extract(isodow from d) = ss.weekday
         AND ($3::uuid IS NULL OR g.teacher_id=$3)
         AND (NOT EXISTS (SELECT 1 FROM secretaria.academic_terms at2 WHERE at2.academic_year_id=g.academic_year_id)
-             OR EXISTS (SELECT 1 FROM secretaria.academic_terms at2 WHERE at2.academic_year_id=g.academic_year_id AND d::date BETWEEN at2.start_date AND at2.end_date))
+             OR EXISTS (SELECT 1 FROM secretaria.academic_terms at2
+                        LEFT JOIN secretaria.group_term_dates gtd ON gtd.academic_term_id=at2.id AND gtd.group_id=g.id
+                        WHERE at2.academic_year_id=g.academic_year_id
+                          AND d::date BETWEEN COALESCE(gtd.start_date, at2.start_date) AND COALESCE(gtd.end_date, at2.end_date)))
         AND NOT EXISTS (SELECT 1 FROM secretaria.non_class_days nc WHERE nc.academic_year_id=g.academic_year_id AND d::date BETWEEN nc.date AND COALESCE(nc.end_date, nc.date))`,
       [f, t, teacherId]);
 

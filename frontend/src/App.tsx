@@ -4519,12 +4519,14 @@ function DanzaDaysModal({ group, student, originGroupId, open, onClose, onDone }
   const DOW = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
   const key = (s: any) => `${s.weekday}|${s.startTime}`;
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
     if (!open || !group || !student) return;
     setChecked(new Set((student.assignments || []).filter((a: any) => a.groupId === group.id).map((a: any) => key(a))));
   }, [open, group?.id, student?.enrollmentId]);
   const toggle = (k: string) => setChecked(c => { const n = new Set(c); n.has(k) ? n.delete(k) : n.add(k); return n; });
   const confirm = async () => {
+    setSaving(true);
     const cur = (student.assignments || []).filter((a: any) => a.groupId === group.id);
     const curKeys = new Set(cur.map((a: any) => key(a)));
     try {
@@ -4541,10 +4543,11 @@ function DanzaDaysModal({ group, student, originGroupId, open, onClose, onDone }
       }
       message.success('Días actualizados'); onDone();
     } catch { message.error('Error al actualizar los días'); }
+    finally { setSaving(false); }
   };
   return (
     <Modal title={`Días de ${student?.studentName || ''} en ${group?.name || ''}`} open={open} onCancel={onClose}
-      onOk={confirm} okText="Guardar" cancelText="Cancelar">
+      onOk={confirm} okText="Guardar" cancelText="Cancelar" confirmLoading={saving}>
       {(group?.schedule || []).length === 0 && <Text type="secondary">Este grupo no tiene franjas. Defínelas en Horarios.</Text>}
       {(group?.schedule || []).map((slot: any) => (
         <div key={key(slot)} style={{ padding: '4px 0' }}>

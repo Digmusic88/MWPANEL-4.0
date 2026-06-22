@@ -4513,49 +4513,125 @@ function DanzaTiersModal({ open, onClose, groups }: { open: boolean; onClose: ()
   );
 }
 
+function DanzaDaysModal({ group, student, originGroupId, open, onClose, onDone }:
+  { group: any; student: any; originGroupId: string | null; open: boolean; onClose: () => void; onDone: () => void }) {
+  const DOW = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  const key = (s: any) => `${s.weekday}|${s.startTime}`;
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!open || !group || !student) return;
+    setChecked(new Set((student.assignments || []).filter((a: any) => a.groupId === group.id).map((a: any) => key(a))));
+  }, [open, group?.id, student?.enrollmentId]);
+  const toggle = (k: string) => setChecked(c => { const n = new Set(c); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const confirm = async () => {
+    const cur = (student.assignments || []).filter((a: any) => a.groupId === group.id);
+    const curKeys = new Set(cur.map((a: any) => key(a)));
+    try {
+      for (const slot of (group.schedule || [])) {
+        const k = key(slot);
+        if (checked.has(k) && !curKeys.has(k)) {
+          const r = await api.post('/danza/assign', { enrollmentId: student.enrollmentId, groupId: group.id, weekday: slot.weekday, startTime: slot.startTime, room: slot.room || group.room });
+          if (r.data?.ok === false) message.warning(r.data.error);
+        }
+      }
+      for (const a of cur) if (!checked.has(key(a))) await api.delete(`/danza/assignment/${a.id}`);
+      if (originGroupId && originGroupId !== group.id) {
+        await api.delete('/danza/assignments', { params: { enrollmentId: student.enrollmentId, groupId: originGroupId } });
+      }
+      message.success('Días actualizados'); onDone();
+    } catch { message.error('Error al actualizar los días'); }
+  };
+  return (
+    <Modal title={`Días de ${student?.studentName || ''} en ${group?.name || ''}`} open={open} onCancel={onClose}
+      onOk={confirm} okText="Guardar" cancelText="Cancelar">
+      {(group?.schedule || []).length === 0 && <Text type="secondary">Este grupo no tiene franjas. Defínelas en Horarios.</Text>}
+      {(group?.schedule || []).map((slot: any) => (
+        <div key={key(slot)} style={{ padding: '4px 0' }}>
+          <Checkbox checked={checked.has(key(slot))} onChange={() => toggle(key(slot))}>
+            {DOW[slot.weekday]} {slot.startTime}{slot.room ? ` · ${slot.room}` : ''}
+          </Checkbox>
+        </div>
+      ))}
+      {originGroupId && originGroupId !== group?.id && <Text type="secondary" style={{ fontSize: 12 }}>Se moverá: se quitarán sus días del grupo de origen.</Text>}
+    </Modal>
+  );
+}
+
 function DanzaBoard() {
+  const DOW = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
   const [years, setYears] = useState<any[]>([]);
-  const [data, setData] = useState<any>({ groups: [], students: [], pool: [] });
-  const [loading, setLoading] = useState(false);
-  const [dragEnr, setDragEnr] = useState<string | null>(null);
+  const [data, setData] = useState<any>({ groups: [], students: [] });
   const [tiersOpen, setTiersOpen] = useState(false);
+  const [drag, setDrag] = useState<{ enrollmentId: string; fromGroupId: string | null } | null>(null);
+  const [daysModal, setDaysModal] = useState<{ group: any; student: any; originGroupId: string | null } | null>(null);
+  const [overCol, setOverCol] = useState<string | null>(null);
   const activeYear = () => years.find(y => y.isActive);
   const load = async () => {
     const y = activeYear(); if (!y) return;
-    setLoading(true);
-    try { const { data } = await api.get('/danza/board', { params: { academicYearId: y.id } }); setData(data); }
-    finally { setLoading(false); }
+    try { const { data } = await api.get('/danza/board', { params: { academicYearId: y.id } }); setData(data); } catch {}
   };
   useEffect(() => { api.get('/catalog/years').then(r => setYears(r.data)); }, []);
   useEffect(() => { if (years.length) load(); }, [years]);
   useLiveQuery(['enrollments', 'groups', 'danza'], load);
 
-  // asignar (arrastrar alumno del pool a una franja de grupo) o quitar
-  const assign = async (enrollmentId: string, g: any, slot: any) => {
-    try {
-      const { data } = await api.post('/danza/assign', { enrollmentId, groupId: g.id, weekday: slot.weekday, startTime: slot.startTime, room: slot.room || g.room });
-      if (data?.ok === false) { message.warning(data.error || 'No se pudo asignar'); return; }
-      load();
-    } catch { message.error('No se pudo asignar'); }
+  const setStatus = async (enrollmentId: string, status: string) => {
+    try { await api.patch(`/enrollments/${enrollmentId}`, { status }); load(); } catch { message.error('Error'); }
   };
-  const removeAssign = async (assignmentId: string) => {
-    try { await api.delete(`/danza/assignment/${assignmentId}`); load(); }
-    catch { message.error('Error'); }
+  const setComment = async (s: any) => {
+    const c = window.prompt('Comentario sobre ' + s.studentName + ':', s.comment || '');
+    if (c === null) return;
+    try { await api.patch(`/enrollments/${s.enrollmentId}`, { notes: c }); load(); } catch { message.error('Error'); }
+  };
+  const quitarGrupo = async (enrollmentId: string, groupId: string) => {
+    try { await api.delete('/danza/assignments', { params: { enrollmentId, groupId } }); load(); } catch { message.error('Error'); }
+  };
+  const openDays = (group: any, student: any, originGroupId: string | null) => setDaysModal({ group, student, originGroupId });
+
+  const bolsa = (data.students || []).filter((s: any) => (s.totalDays || 0) === 0);
+  const inGroup = (g: any) => (data.students || []).filter((s: any) => (s.assignments || []).some((a: any) => a.groupId === g.id));
+  const daysOf = (s: any, g: any) => (s.assignments || []).filter((a: any) => a.groupId === g.id).map((a: any) => `${DOW[a.weekday]} ${a.startTime}`).join(', ');
+
+  const card = (s: any, g: any | null) => {
+    const st = orgStat(s.status);
+    const menu = {
+      items: [
+        { key: 'comment', label: s.comment ? 'Editar comentario' : 'Añadir comentario' },
+        ...(g ? [{ key: 'days', label: 'Editar días' }, { key: 'quit', label: 'Quitar del grupo' }] : []),
+        { type: 'divider' as const },
+        { key: 'st_matriculado', label: '✓ Matricular' },
+        { key: 'st_preinscrito', label: 'Marcar preinscrito' },
+        { key: 'st_lista_espera', label: 'A lista de espera' },
+      ],
+      onClick: ({ key }: any) => {
+        if (key === 'comment') setComment(s);
+        else if (key === 'days' && g) openDays(g, s, null);
+        else if (key === 'quit' && g) quitarGrupo(s.enrollmentId, g.id);
+        else if (key.startsWith('st_')) setStatus(s.enrollmentId, key.slice(3));
+      },
+    };
+    return (
+      <div key={s.enrollmentId + (g ? ':' + g.id : ':pool')} draggable
+        onDragStart={() => setDrag({ enrollmentId: s.enrollmentId, fromGroupId: g ? g.id : null })}
+        onDragEnd={() => setDrag(null)}
+        style={{ background: st.bg, border: `1px solid ${st.border}`, borderRadius: 6, padding: '4px 8px', marginBottom: 4, cursor: 'grab' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontSize: 13 }}>
+            {st.tick && '✓ '}{s.studentName}
+            {s.comment && <Tooltip title={s.comment}><span style={{ marginLeft: 4 }}>💬</span></Tooltip>}
+          </span>
+          <Dropdown menu={menu} trigger={['click']}><Button type="text" size="small">⋯</Button></Dropdown>
+        </div>
+        {g && <Text type="secondary" style={{ fontSize: 11 }}>{daysOf(s, g) || '(sin días)'}</Text>}
+      </div>
+    );
   };
 
-  // alumnos asignados a una franja concreta de un grupo
-  const studentsInSlot = (g: any, slot: any) => data.students.filter((s: any) =>
-    (s.assignments || []).some((a: any) => a.groupId === g.id && a.weekday === slot.weekday && a.startTime === slot.startTime));
-  const assignmentId = (s: any, g: any, slot: any) => (s.assignments || []).find((a: any) =>
-    a.groupId === g.id && a.weekday === slot.weekday && a.startTime === slot.startTime)?.id;
-
-  const DOW = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  const colStyle = { maxHeight: '70vh', overflowY: 'auto' as const };
   return (
     <div>
       <Title level={3}>Danza</Title>
-      <Ayuda title="Organización de Danza por días">
-        Cada grupo ofrece franjas (día + hora, definidas en <b>Horarios</b>). Arrastra un alumno de <b>Sin asignar</b> a la franja a la que viene.
-        La <b>mensualidad se calcula por el total de días</b> que suma el alumno (tabla de tramos, editable en <b>Tramos de tarifa</b>); el <b>maillot</b> se cobra si el grupo lo tiene activado.
+      <Ayuda title="Organización de Danza por días (kanban)">
+        Arrastra alumnos de <b>Sin asignar</b> a un grupo: te preguntará a qué <b>días</b> viene. Arrastrar de un grupo a otro lo <b>mueve</b> (lo quita del origen). El menú <b>⋯</b> cambia el estado (preinscrito/matriculado/lista de espera), añade comentario o lo quita del grupo. La <b>mensualidad</b> sale del total de días (tramos) y el <b>maillot</b> si el grupo lo cobra.
       </Ayuda>
       <Card>
         <Space style={{ marginBottom: 12 }} wrap>
@@ -4563,58 +4639,47 @@ function DanzaBoard() {
           <Button onClick={() => setTiersOpen(true)}>Tramos de tarifa</Button>
         </Space>
         <Row gutter={12}>
-          {/* Pool: sin asignar */}
           <Col xs={24} md={6}>
-            <Card size="small" title={`Sin asignar (${data.pool.length})`}
-              style={{ background: '#FAFAF8' }}>
-              {data.pool.map((p: any) => (
-                <div key={p.enrollmentId} draggable onDragStart={() => setDragEnr(p.enrollmentId)} onDragEnd={() => setDragEnr(null)}
-                  style={{ padding: '4px 8px', marginBottom: 4, border: '1px solid #E2DDD8', borderRadius: 4, cursor: 'grab', background: '#fff' }}>
-                  {p.studentName}
-                </div>
-              ))}
-              {!data.pool.length && <Text type="secondary">Todos asignados</Text>}
+            <Card size="small" title={`Sin asignar (${bolsa.length})`} style={{ background: '#FAFAF8' }}
+              styles={{ body: colStyle }}
+              onDragOver={(e) => e.preventDefault()}>
+              {bolsa.map((s: any) => card(s, null))}
+              {!bolsa.length && <Text type="secondary">Todos asignados</Text>}
             </Card>
           </Col>
-          {/* Grupos con sus franjas */}
           <Col xs={24} md={18}>
             <Row gutter={[12, 12]}>
               {data.groups.map((g: any) => (
                 <Col xs={24} lg={12} key={g.id}>
-                  <Card size="small" title={<span>{g.name} {g.billsMaillot && <Tag color="purple">maillot</Tag>}</span>}>
-                    {(g.schedule || []).length === 0 && <Text type="secondary">Sin franjas — defínelas en Horarios</Text>}
-                    {(g.schedule || []).map((slot: any, i: number) => (
-                      <div key={i} onDragOver={e => e.preventDefault()} onDrop={() => dragEnr && assign(dragEnr, g, slot)}
-                        style={{ border: '1px dashed #E2DDD8', borderRadius: 4, padding: 6, marginBottom: 6 }}>
-                        <Text strong style={{ fontSize: 12 }}>{DOW[slot.weekday]} {slot.startTime}{slot.room ? ` · ${slot.room}` : ''}</Text>
-                        <div style={{ marginTop: 4 }}>
-                          {studentsInSlot(g, slot).map((s: any) => (
-                            <Tag key={s.enrollmentId} closable onClose={(e) => { e.preventDefault(); const id = assignmentId(s, g, slot); if (id) removeAssign(id); }}
-                              style={{ marginBottom: 2 }}>{s.studentName}</Tag>
-                          ))}
-                          {!studentsInSlot(g, slot).length && <Text type="secondary" style={{ fontSize: 11 }}>(arrastra alumnos aquí)</Text>}
-                        </div>
-                      </div>
-                    ))}
+                  <Card size="small" style={{ outline: overCol === g.id ? '2px solid #579172' : 'none' }}
+                    title={<span>{g.name} {g.billsMaillot && <Tag color="purple">maillot</Tag>} <Text type="secondary" style={{ fontSize: 11 }}>{(g.schedule || []).map((sl: any) => `${DOW[sl.weekday]} ${sl.startTime}`).join(' · ')}</Text></span>}
+                    styles={{ body: colStyle }}
+                    onDragOver={(e) => { e.preventDefault(); setOverCol(g.id); }}
+                    onDragLeave={() => setOverCol(null)}
+                    onDrop={() => { setOverCol(null); if (drag) { const s = data.students.find((x: any) => x.enrollmentId === drag.enrollmentId); if (s) openDays(g, s, drag.fromGroupId); } setDrag(null); }}>
+                    {(g.schedule || []).length === 0 && <Text type="secondary" style={{ fontSize: 12 }}>Sin franjas — defínelas en Horarios</Text>}
+                    {inGroup(g).map((s: any) => card(s, g))}
+                    {!inGroup(g).length && (g.schedule || []).length > 0 && <Text type="secondary" style={{ fontSize: 11 }}>(arrastra alumnos aquí)</Text>}
                   </Card>
                 </Col>
               ))}
             </Row>
           </Col>
         </Row>
-        {/* Resumen: alumnos con días + tarifa resuelta */}
-        <Card size="small" title="Alumnos asignados (días y mensualidad)" style={{ marginTop: 12 }}>
+        <Card size="small" title="Resumen: días y mensualidad" style={{ marginTop: 12 }}>
           <SearchableTable rowKey="enrollmentId" dataSource={data.students} size="small" pagination={{ pageSize: 15 }}
             columns={[
               { title: 'Alumno', dataIndex: 'studentName' },
+              { title: 'Estado', dataIndex: 'status', render: (s: any) => <Tag color={s === 'matriculado' ? 'green' : s === 'lista_espera' ? 'orange' : s === 'preinscrito' ? 'gold' : 'blue'}>{orgStat(s).label}</Tag> },
               { title: 'Días', dataIndex: 'totalDays', align: 'center' },
-              { title: 'Detalle', render: (_: any, s: any) => (s.assignments || []).map((a: any) => `${DOW[a.weekday]} ${a.startTime}`).join(', ') },
               { title: 'Mensualidad', dataIndex: 'monthly', align: 'right', render: (m: any) => m != null ? `${Number(m).toFixed(2)} €` : <Tag color="red">sin tramo</Tag> },
               { title: 'Maillot', dataIndex: 'maillot', align: 'right', render: (m: any) => m != null ? `${Number(m).toFixed(2)} €` : '—' },
             ]} />
         </Card>
       </Card>
       <DanzaTiersModal open={tiersOpen} onClose={() => setTiersOpen(false)} groups={data.groups} />
+      <DanzaDaysModal open={!!daysModal} group={daysModal?.group} student={daysModal?.student} originGroupId={daysModal?.originGroupId ?? null}
+        onClose={() => setDaysModal(null)} onDone={() => { setDaysModal(null); load(); }} />
     </div>
   );
 }

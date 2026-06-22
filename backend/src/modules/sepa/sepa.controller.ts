@@ -139,7 +139,7 @@ export class SepaController {
       JOIN secretaria.families f ON f.id=st.family_id
       JOIN LATERAL (
         SELECT bk.id FROM secretaria.bank_accounts bk
-        WHERE bk.family_id=st.family_id AND bk.is_active AND bk.sepa_mandate_ref IS NOT NULL
+        WHERE bk.family_id=st.family_id AND bk.is_active AND bk.student_id IS NULL AND bk.sepa_mandate_ref IS NOT NULL
         ORDER BY bk.created_at DESC LIMIT 1
       ) ba ON true
       WHERE e.academic_year_id=$1 AND c.status='pendiente' AND c.sepa_batch_id IS NULL

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query, NotFoundException, BadRequestException } from '@nestjs/common';
 import { IsString, IsOptional, IsUUID, IsNumber, IsArray, IsBoolean } from 'class-validator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -22,6 +22,24 @@ class AddEnrollmentDto {
 class EnrollFeeDto {
   @IsNumber() customFee: number;
   @IsOptional() @IsString() customFeeReason?: string;
+}
+
+// ---- IBAN helpers (mirrors sepa.controller validators — kept local to avoid touching working SEPA code) ----
+const SECRETARIA_CRYPTO_KEY = process.env.SECRETARIA_CRYPTO_KEY || '';
+function normalizeIban(raw: string): string { return (raw || '').replace(/\s+/g, '').toUpperCase(); }
+function isValidIban(raw: string): boolean {
+  const s = normalizeIban(raw);
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(s)) return false;
+  const rearr = s.slice(4) + s.slice(0, 4);
+  const expanded = rearr.replace(/[A-Z]/g, c => (c.charCodeAt(0) - 55).toString());
+  let rem = 0;
+  for (const ch of expanded) rem = (rem * 10 + (ch.charCodeAt(0) - 48)) % 97;
+  return rem === 1;
+}
+class StudentBankDto {
+  @IsString() iban: string;
+  @IsOptional() @IsString() holderName?: string;
+  @IsString() scope: 'familia' | 'alumno';
 }
 
 @Controller('secretaria/students')
@@ -581,5 +599,59 @@ export class StudentsController {
       await m.query(`DELETE FROM secretaria.students WHERE id=$1`, [id]);
       return { ok: true };
     });
+  }
+
+  @Get(':id/bank') @Roles('secretaria_admin','secretaria_staff','direccion')
+  async getBank(@Param('id') id: string) {
+    const [st] = await this.ds.query(`SELECT family_id AS "familyId" FROM secretaria.students WHERE id=$1`, [id]);
+    if (!st) throw new NotFoundException('Alumno no encontrado');
+    const [familyAccount] = await this.ds.query(`
+      SELECT id, iban_last4 AS "ibanLast4", holder_name AS "holderName", sepa_mandate_ref AS "mandateRef"
+      FROM secretaria.bank_accounts
+      WHERE family_id=$1 AND student_id IS NULL AND is_active
+      ORDER BY created_at DESC LIMIT 1`, [st.familyId]);
+    const [override] = await this.ds.query(`
+      SELECT id, iban_last4 AS "ibanLast4", holder_name AS "holderName"
+      FROM secretaria.bank_accounts
+      WHERE student_id=$1 AND is_active
+      ORDER BY created_at DESC LIMIT 1`, [id]);
+    return { familyAccount: familyAccount || null, override: override || null };
+  }
+
+  @Post(':id/bank') @Roles('secretaria_admin','secretaria_staff')
+  async setBank(@Param('id') id: string, @Body() b: StudentBankDto) {
+    if (!SECRETARIA_CRYPTO_KEY) throw new BadRequestException('Falta SECRETARIA_CRYPTO_KEY en el servidor');
+    if (b.scope !== 'familia' && b.scope !== 'alumno') throw new BadRequestException('scope inválido');
+    const iban = normalizeIban(b.iban);
+    if (!isValidIban(iban)) throw new BadRequestException('IBAN no válido');
+    const last4 = iban.slice(-4);
+    const [st] = await this.ds.query(`SELECT family_id AS "familyId" FROM secretaria.students WHERE id=$1`, [id]);
+    if (!st) throw new NotFoundException('Alumno no encontrado');
+
+    if (b.scope === 'familia') {
+      await this.ds.query(
+        `UPDATE secretaria.bank_accounts SET is_active=false WHERE family_id=$1 AND student_id IS NULL AND is_active`,
+        [st.familyId]);
+      await this.ds.query(`
+        INSERT INTO secretaria.bank_accounts(family_id, student_id, iban_encrypted, iban_last4, holder_name, sepa_mandate_ref, sepa_mandate_date, is_active)
+        VALUES ($1::uuid, NULL, pgp_sym_encrypt($2,$3), $4, $5,
+                'MAND-'||substr(replace($1::text,'-',''),1,8)||'-'||to_char(now(),'YYYYMMDD'),
+                now()::date, true)`,
+        [st.familyId, iban, SECRETARIA_CRYPTO_KEY, last4, b.holderName || null]);
+    } else {
+      await this.ds.query(
+        `UPDATE secretaria.bank_accounts SET is_active=false WHERE student_id=$1 AND is_active`, [id]);
+      await this.ds.query(`
+        INSERT INTO secretaria.bank_accounts(family_id, student_id, iban_encrypted, iban_last4, holder_name, sepa_mandate_ref, sepa_mandate_date, is_active)
+        VALUES ($1::uuid, $2::uuid, pgp_sym_encrypt($3,$4), $5, $6, NULL, NULL, true)`,
+        [st.familyId, id, iban, SECRETARIA_CRYPTO_KEY, last4, b.holderName || null]);
+    }
+    return { ok: true, ibanLast4: last4, scope: b.scope };
+  }
+
+  @Delete(':id/bank-override') @Roles('secretaria_admin','secretaria_staff')
+  async deleteBankOverride(@Param('id') id: string) {
+    await this.ds.query(`UPDATE secretaria.bank_accounts SET is_active=false WHERE student_id=$1 AND is_active`, [id]);
+    return { ok: true };
   }
 }

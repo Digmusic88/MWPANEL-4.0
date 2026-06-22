@@ -11,6 +11,9 @@ import {
 import { api, setToken, clearToken, getToken, beginImpersonation, endImpersonation, isImpersonating } from './api';
 import { InscripcionDrawer } from './components/InscripcionDrawer';
 import { useLiveQuery } from './realtime/useLiveQuery';
+import { useRoomPresence } from './realtime/useRoomPresence';
+import { PresenceBar } from './components/PresenceBar';
+import { EditingBadge } from './components/EditingBadge';
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -1859,6 +1862,8 @@ function Familias() {
   const [linkStudentId, setLinkStudentId] = useState<string | undefined>();
   const loadList = () => api.get('/families').then(r => setRows(r.data));
   useEffect(() => { loadList(); api.get('/students').then(r => setAllStudents(r.data)).catch(() => {}); }, []);
+  const { present: famPresent, startEditing: famStartEditing } = useRoomPresence(detail ? `family:${detail.id}` : null);
+  useEffect(() => { if (detail) famStartEditing('ficha'); }, [detail?.id]);
   const attachExisting = async () => {
     if (!linkStudentId) return;
     try { await api.post(`/families/${detail.id}/attach-student`, { studentId: linkStudentId }); message.success('Hermano/a vinculado a la familia'); setLinkStudentId(undefined); reloadDetail(); api.get('/students').then(r => setAllStudents(r.data)); }
@@ -1900,8 +1905,15 @@ function Familias() {
           ]} />
       </Card>
 
-      <Modal title={`Familia — ${detail?.displayName || ''}`} open={!!detail} onCancel={() => setDetail(null)}
+      <Modal
+        title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {`Familia — ${detail?.displayName || ''}`}
+          <PresenceBar present={famPresent} />
+        </span>}
+        open={!!detail} onCancel={() => setDetail(null)}
         footer={<Button onClick={() => setDetail(null)}>Cerrar</Button>} width={screens.md ? 780 : '95vw'}>
+        {/* Aviso de otro usuario editando simultáneamente */}
+        <EditingBadge present={famPresent} targetKey="ficha" />
         {/* HIJOS */}
         <Title level={5} style={{ marginTop: 0 }}>Alumnos de la familia</Title>
         <Table rowKey="id" dataSource={detail?.students || []} size="small" pagination={false} style={{ marginBottom: 8 }}

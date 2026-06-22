@@ -9,6 +9,11 @@ api.interceptors.request.use((c) => {
 export function setToken(t: string) { localStorage.setItem('secretaria_token', t); localStorage.removeItem(ADMIN_KEY); }
 export function clearToken() { localStorage.removeItem('secretaria_token'); localStorage.removeItem(ADMIN_KEY); }
 export function getToken() { return localStorage.getItem('secretaria_token'); }
+export function getUserId(): string | null {
+  const t = getToken();
+  if (!t) return null;
+  try { const p = JSON.parse(atob(t.split('.')[1])); return p.sub || p.id || null; } catch { return null; }
+}
 
 // ACCESO INTERNO (impersonación): guarda el token de admin y activa el del usuario destino;
 // al volver, restaura el de admin.

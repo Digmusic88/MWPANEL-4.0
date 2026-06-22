@@ -5,6 +5,9 @@ import {
 } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { api } from '../api';
+import { useRoomPresence } from '../realtime/useRoomPresence';
+import { PresenceBar } from './PresenceBar';
+import { EditingBadge } from './EditingBadge';
 
 const { Text } = Typography;
 
@@ -52,6 +55,15 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
   const [enrollments, setEnrollments] = useState<any[]>([]);   // servicios inscritos (modo edición)
   const [addSvc, setAddSvc] = useState<string | undefined>();  // servicio a añadir (modo edición)
   const [editUpdatedAt, setEditUpdatedAt] = useState<string | null>(null);
+
+  const { present, startEditing } = useRoomPresence(open && editingStudentId ? `student:${editingStudentId}` : null);
+
+  // Marcar como editando mientras el drawer está abierto en modo edición
+  useEffect(() => {
+    if (open && editingStudentId) {
+      startEditing('ficha');
+    }
+  }, [open, editingStudentId]);
 
   const enrollmentsWatch: any[] = Form.useWatch('enrollments', form) || [];
   const matriculaAmountWatch = Form.useWatch('matriculaAmount', form);
@@ -303,6 +315,7 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
       open={open}
       onClose={onClose}
       width={screens.md ? 700 : '100%'}
+      extra={isEditMode ? <PresenceBar present={present} /> : null}
       footer={
         <div style={{ textAlign: 'right' }}>
           <Button onClick={onClose} style={{ marginRight: 8 }}>Cancelar</Button>
@@ -321,6 +334,8 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
           message={`Pendientes: ${pendingItems.join(', ')}`}
         />
       )}
+      {/* Aviso de otro usuario editando simultáneamente */}
+      {isEditMode && <EditingBadge present={present} targetKey="ficha" />}
 
       <Form form={form} layout="vertical" onFinish={handleSave}
         onValuesChange={(_, all) => { if (!editingStudentId) { try { localStorage.setItem('inscripcion_draft', JSON.stringify(all)); } catch { /* */ } } }}>

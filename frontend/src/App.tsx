@@ -4465,6 +4465,153 @@ function ApoyoBoard() {
   );
 }
 
+// ----------------------------- DANZA -----------------------------
+function DanzaTiersModal({ open, onClose, groups }: { open: boolean; onClose: () => void; groups: any[] }) {
+  const [scope, setScope] = useState<string>('default'); // 'default' o un groupId
+  const [tiers, setTiers] = useState<any[]>([]);
+  const [days, setDays] = useState<number | undefined>();
+  const [amount, setAmount] = useState<number | undefined>();
+  const load = async () => {
+    const params = scope === 'default' ? {} : { groupId: scope };
+    const { data } = await api.get('/danza/tiers', { params });
+    setTiers(data);
+  };
+  useEffect(() => { if (open) load(); }, [open, scope]);
+  const add = async () => {
+    if (!days || days < 1 || amount == null || amount <= 0) { message.warning('Indica días (≥1) e importe (>0)'); return; }
+    const body: any = { days, amount }; if (scope !== 'default') body.groupId = scope;
+    const { data } = await api.post('/danza/tiers', body);
+    if (data?.ok === false) message.warning(data.error); else { setDays(undefined); setAmount(undefined); load(); }
+  };
+  const del = async (id: string) => { await api.delete(`/danza/tiers/${id}`); load(); };
+  return (
+    <Modal title="Tramos de tarifa de Danza" open={open} onCancel={onClose} footer={<Button onClick={onClose}>Cerrar</Button>} width={560}>
+      <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+        Precio mensual según el nº de días que suma el alumno. La tabla "Por defecto" se usa salvo que TODOS los días sean de un grupo con su propio tramo.
+      </Text>
+      <Space style={{ marginBottom: 12 }} wrap>
+        <Text>Tabla:</Text>
+        <Select style={{ width: 240 }} value={scope} onChange={setScope}
+          options={[{ value: 'default', label: 'Por defecto (Danza)' }, ...groups.map((g: any) => ({ value: g.id, label: `Override: ${g.name}` }))]} />
+      </Space>
+      <Table rowKey="id" size="small" pagination={false} dataSource={tiers}
+        columns={[
+          { title: 'Días', dataIndex: 'days', align: 'center' },
+          { title: 'Mensualidad', dataIndex: 'amount', align: 'right', render: (a: any) => `${Number(a).toFixed(2)} €` },
+          { title: '', align: 'right', render: (_: any, r: any) => <Popconfirm title="¿Quitar tramo?" onConfirm={() => del(r.id)}><Button size="small" danger>Quitar</Button></Popconfirm> },
+        ]} />
+      <Space style={{ marginTop: 12 }} wrap>
+        <InputNumber min={1} placeholder="Días" value={days} onChange={(v) => setDays(v as number)} style={{ width: 90 }} />
+        <InputNumber min={0} step={0.5} placeholder="€/mes" value={amount} onChange={(v) => setAmount(v as number)} style={{ width: 120 }} addonAfter="€" />
+        <Button type="primary" onClick={add}>Añadir / actualizar tramo</Button>
+      </Space>
+    </Modal>
+  );
+}
+
+function DanzaBoard() {
+  const [years, setYears] = useState<any[]>([]);
+  const [data, setData] = useState<any>({ groups: [], students: [], pool: [] });
+  const [loading, setLoading] = useState(false);
+  const [dragEnr, setDragEnr] = useState<string | null>(null);
+  const [tiersOpen, setTiersOpen] = useState(false);
+  const activeYear = () => years.find(y => y.isActive);
+  const load = async () => {
+    const y = activeYear(); if (!y) return;
+    setLoading(true);
+    try { const { data } = await api.get('/danza/board', { params: { academicYearId: y.id } }); setData(data); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { api.get('/catalog/years').then(r => setYears(r.data)); }, []);
+  useEffect(() => { if (years.length) load(); }, [years]);
+  useLiveQuery(['enrollments', 'groups'], load);
+
+  // asignar (arrastrar alumno del pool a una franja de grupo) o quitar
+  const assign = async (enrollmentId: string, g: any, slot: any) => {
+    try { await api.post('/danza/assign', { enrollmentId, groupId: g.id, weekday: slot.weekday, startTime: slot.startTime, room: slot.room || g.room }); load(); }
+    catch { message.error('No se pudo asignar'); }
+  };
+  const removeAssign = async (assignmentId: string) => {
+    try { await api.delete(`/danza/assignment/${assignmentId}`); load(); }
+    catch { message.error('Error'); }
+  };
+
+  // alumnos asignados a una franja concreta de un grupo
+  const studentsInSlot = (g: any, slot: any) => data.students.filter((s: any) =>
+    (s.assignments || []).some((a: any) => a.groupId === g.id && a.weekday === slot.weekday && a.startTime === slot.startTime));
+  const assignmentId = (s: any, g: any, slot: any) => (s.assignments || []).find((a: any) =>
+    a.groupId === g.id && a.weekday === slot.weekday && a.startTime === slot.startTime)?.id;
+
+  const DOW = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  return (
+    <div>
+      <Title level={3}>Danza</Title>
+      <Ayuda title="Organización de Danza por días">
+        Cada grupo ofrece franjas (día + hora, definidas en <b>Horarios</b>). Arrastra un alumno de <b>Sin asignar</b> a la franja a la que viene.
+        La <b>mensualidad se calcula por el total de días</b> que suma el alumno (tabla de tramos, editable en <b>Tramos de tarifa</b>); el <b>maillot</b> se cobra si el grupo lo tiene activado.
+      </Ayuda>
+      <Card>
+        <Space style={{ marginBottom: 12 }} wrap>
+          <Button onClick={load}>Actualizar</Button>
+          <Button onClick={() => setTiersOpen(true)}>Tramos de tarifa</Button>
+        </Space>
+        <Row gutter={12}>
+          {/* Pool: sin asignar */}
+          <Col xs={24} md={6}>
+            <Card size="small" title={`Sin asignar (${data.pool.length})`}
+              style={{ background: '#FAFAF8' }}>
+              {data.pool.map((p: any) => (
+                <div key={p.enrollmentId} draggable onDragStart={() => setDragEnr(p.enrollmentId)} onDragEnd={() => setDragEnr(null)}
+                  style={{ padding: '4px 8px', marginBottom: 4, border: '1px solid #E2DDD8', borderRadius: 4, cursor: 'grab', background: '#fff' }}>
+                  {p.studentName}
+                </div>
+              ))}
+              {!data.pool.length && <Text type="secondary">Todos asignados</Text>}
+            </Card>
+          </Col>
+          {/* Grupos con sus franjas */}
+          <Col xs={24} md={18}>
+            <Row gutter={[12, 12]}>
+              {data.groups.map((g: any) => (
+                <Col xs={24} lg={12} key={g.id}>
+                  <Card size="small" title={<span>{g.name} {g.billsMaillot && <Tag color="purple">maillot</Tag>}</span>}>
+                    {(g.schedule || []).length === 0 && <Text type="secondary">Sin franjas — defínelas en Horarios</Text>}
+                    {(g.schedule || []).map((slot: any, i: number) => (
+                      <div key={i} onDragOver={e => e.preventDefault()} onDrop={() => dragEnr && assign(dragEnr, g, slot)}
+                        style={{ border: '1px dashed #E2DDD8', borderRadius: 4, padding: 6, marginBottom: 6 }}>
+                        <Text strong style={{ fontSize: 12 }}>{DOW[slot.weekday]} {slot.startTime}{slot.room ? ` · ${slot.room}` : ''}</Text>
+                        <div style={{ marginTop: 4 }}>
+                          {studentsInSlot(g, slot).map((s: any) => (
+                            <Tag key={s.enrollmentId} closable onClose={(e) => { e.preventDefault(); const id = assignmentId(s, g, slot); if (id) removeAssign(id); }}
+                              style={{ marginBottom: 2 }}>{s.studentName}</Tag>
+                          ))}
+                          {!studentsInSlot(g, slot).length && <Text type="secondary" style={{ fontSize: 11 }}>(arrastra alumnos aquí)</Text>}
+                        </div>
+                      </div>
+                    ))}
+                  </Card>
+                </Col>
+              ))}
+            </Row>
+          </Col>
+        </Row>
+        {/* Resumen: alumnos con días + tarifa resuelta */}
+        <Card size="small" title="Alumnos asignados (días y mensualidad)" style={{ marginTop: 12 }}>
+          <SearchableTable rowKey="enrollmentId" dataSource={data.students} size="small" pagination={{ pageSize: 15 }}
+            columns={[
+              { title: 'Alumno', dataIndex: 'studentName' },
+              { title: 'Días', dataIndex: 'totalDays', align: 'center' },
+              { title: 'Detalle', render: (_: any, s: any) => (s.assignments || []).map((a: any) => `${DOW[a.weekday]} ${a.startTime}`).join(', ') },
+              { title: 'Mensualidad', dataIndex: 'monthly', align: 'right', render: (m: any) => m != null ? `${Number(m).toFixed(2)} €` : <Tag color="red">sin tramo</Tag> },
+              { title: 'Maillot', dataIndex: 'maillot', align: 'right', render: (m: any) => m != null ? `${Number(m).toFixed(2)} €` : '—' },
+            ]} />
+        </Card>
+      </Card>
+      <DanzaTiersModal open={tiersOpen} onClose={() => setTiersOpen(false)} groups={data.groups} />
+    </div>
+  );
+}
+
 // ----------------------------- REGISTRO DE TAREAS (caritas) -----------------------------
 const TASK_LEVELS = ['verde', 'naranja', 'roja'];
 const TASK_META: any = {
@@ -4853,6 +5000,7 @@ export default function App() {
     cuaderno: { icon: <FormOutlined />, label: 'Cuaderno docente' },
     horarios: { icon: <DashboardOutlined />, label: 'Horarios' },
     apoyo: { icon: <AppstoreOutlined />, label: 'Apoyo (franjas)' },
+    danza: { icon: <AppstoreOutlined />, label: 'Danza' },
     examenes: { icon: <FormOutlined />, label: 'Simulacros' },
     mock: { icon: <DashboardOutlined />, label: 'Resultados Mock' },
     reuniones: { icon: <FormOutlined />, label: 'Reuniones' },
@@ -4860,7 +5008,7 @@ export default function App() {
     config: { icon: <SettingOutlined />, label: 'Configuración' },
   };
   const GROUPS = [
-    { key: 'g_resumen', icon: <DashboardOutlined />, label: 'Resumen', children: ['dashboard', 'organizacion', 'apoyo', 'eventos'] },
+    { key: 'g_resumen', icon: <DashboardOutlined />, label: 'Resumen', children: ['dashboard', 'organizacion', 'apoyo', 'danza', 'eventos'] },
     { key: 'g_alumnado', icon: <TeamOutlined />, label: 'Alumnado', children: ['alumnos', 'matriculas', 'familias', 'bajas', 'nivel', 'documentacion'] },
     { key: 'g_economico', icon: <EuroOutlined />, label: 'Económico', children: ['pagos', 'morosidad', 'remesas', 'rifas', 'taper', 'informes'] },
     { key: 'g_docencia', icon: <FormOutlined />, label: 'Docencia', children: ['asistencia', 'tareas', 'cuaderno', 'horarios', 'examenes', 'mock', 'reuniones', 'chat'] },
@@ -4939,6 +5087,7 @@ export default function App() {
           {safeView === 'documentacion' && <Documentacion />}
           {safeView === 'grupos' && <Grupos user={user} />}
           {safeView === 'apoyo' && <ApoyoBoard />}
+          {safeView === 'danza' && <DanzaBoard />}
           {safeView === 'profesores' && <Profesores />}
           {safeView === 'asistencia' && <Asistencia user={user} />}
           {safeView === 'tareas' && <Tareas />}

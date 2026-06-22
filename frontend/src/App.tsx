@@ -1830,7 +1830,8 @@ function Pagos() {
   };
 
   const cols: any[] = [
-    { title: 'Alumno', dataIndex: 'studentName', fixed: 'left', width: 170 },
+    { title: 'Alumno', dataIndex: 'studentName', fixed: 'left', width: 190,
+      render: (n: any, r: any) => <span>{n}{r.danzaDays > 0 && <Tag color="purple" style={{ marginLeft: 6 }}>{r.danzaDays} {r.danzaDays === 1 ? 'día' : 'días'}</Tag>}</span> },
     ...(data.columns || []).map((col: any) => ({
       title: col.label, key: col.key, align: 'center',
       width: (col.concept === 'matricula' || col.concept === 'material') ? 80 : 56,

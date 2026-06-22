@@ -5,6 +5,7 @@ import { Repository, DataSource } from 'typeorm';
 import { Student, Enrollment } from './entities';
 import { Family } from '../families/entities';
 import { SecretariaAuthGuard, Roles } from '../../common/secretaria-auth.guard';
+import { VersionConflictException } from '../../common/optimistic-lock';
 
 class QuickEnrollDto {
   @IsString() studentName: string;
@@ -188,7 +189,8 @@ export class StudentsController {
               s.school_origin AS "schoolOrigin",
               s.address, s.postal_code AS "postalCode", s.city, s.notes,
               s.mwpanel_student_id AS "mwpanelStudentId",
-              s.family_id AS "familyId"
+              s.family_id AS "familyId",
+              s.updated_at AS "updatedAt"
        FROM secretaria.students s WHERE s.id = $1`, [id]);
     if (!student) return null;
 
@@ -248,7 +250,20 @@ export class StudentsController {
         if (b.student.notes      !== undefined) push('notes',         b.student.notes      ?? null);
         if (sets.length > 0) {
           params.push(id);
-          await m.query(`UPDATE secretaria.students SET ${sets.join(',')} WHERE id=$${params.length}`, params);
+          const idParam = params.length;
+          if (b.expectedUpdatedAt) {
+            params.push(b.expectedUpdatedAt);
+            const verParam = params.length;
+            const updated = await m.query(
+              `UPDATE secretaria.students SET ${sets.join(',')} WHERE id=$${idParam} AND updated_at=$${verParam} RETURNING id`,
+              params);
+            if (!updated || updated.length === 0) {
+              const [cur] = await m.query(`SELECT * FROM secretaria.students WHERE id=$1`, [id]);
+              throw new VersionConflictException(cur ?? null);
+            }
+          } else {
+            await m.query(`UPDATE secretaria.students SET ${sets.join(',')} WHERE id=$${idParam}`, params);
+          }
         }
       }
 

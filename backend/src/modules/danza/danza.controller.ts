@@ -74,6 +74,11 @@ export class DanzaController {
 
   @Post('assign') @Roles('secretaria_admin','secretaria_staff','direccion')
   async assign(@Body() b: { enrollmentId: string; groupId: string; weekday: number; startTime: string; room?: string }) {
+    const chk = await this.ds.query(`
+      SELECT 1 FROM secretaria.enrollments e JOIN secretaria.services se ON se.id=e.service_id
+      JOIN secretaria.groups g ON g.id=$2 JOIN secretaria.programs p ON p.id=g.program_id JOIN secretaria.services sg ON sg.id=p.service_id
+      WHERE e.id=$1 AND se.code='DANZA' AND sg.code='DANZA'`, [b.enrollmentId, b.groupId]);
+    if (chk.length === 0) return { ok: false, error: 'La matrícula o el grupo no son de Danza' };
     await this.ds.query(
       `INSERT INTO secretaria.danza_assignments(enrollment_id, group_id, weekday, start_time, room)
        VALUES ($1,$2,$3,$4,$5) ON CONFLICT (enrollment_id, group_id, weekday, start_time) DO NOTHING`,

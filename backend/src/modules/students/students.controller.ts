@@ -39,9 +39,21 @@ export class StudentsController {
     return y[0]?.id;
   }
 
+  // Categoría global del alumno: el estado de mayor prioridad entre sus inscripciones (ignorando 'baja')
+  private studentCategory(enrollments: any[]): string {
+    const PRIO: Record<string, number> = { matriculado: 4, pendiente: 3, lista_espera: 2, preinscrito: 1 };
+    const BY_PRIO = ['sin_inscripcion', 'preinscrito', 'lista_espera', 'pendiente', 'matriculado'];
+    let best = 0;
+    for (const e of enrollments || []) {
+      if (!e || e.status === 'baja') continue;
+      best = Math.max(best, PRIO[e.status] || 0);
+    }
+    return BY_PRIO[best];
+  }
+
   // Lista de alumnos con los servicios en los que está matriculado este curso (puede ser más de uno)
-  @Get() @Roles('secretaria_admin','secretaria_staff','direccion') list(@Query('q') q?: string, @Query('pending') onlyPending?: string) {
-    return this.ds.query(`
+  @Get() @Roles('secretaria_admin','secretaria_staff','direccion') async list(@Query('q') q?: string, @Query('pending') onlyPending?: string, @Query('category') category?: string) {
+    const rows = await this.ds.query(`
       SELECT s.id, s.first_name AS "firstName", s.last_name AS "lastName",
              s.is_active AS "isActive",
              s.mwpanel_student_id AS "mwpanelStudentId", s.family_id AS "familyId",
@@ -107,6 +119,8 @@ export class StudentsController {
               )
       ORDER BY s.last_name NULLS LAST, s.first_name`,
       [q || null, onlyPending === 'true' ? true : null]);
+    for (const r of rows) r.category = this.studentCategory(r.enrollments);
+    return category ? rows.filter((r: any) => r.category === category) : rows;
   }
 
   @Get(':id') @Roles('secretaria_admin','secretaria_staff','direccion') async one(@Param('id') id: string) {

@@ -1306,6 +1306,9 @@ function Grupos({ user }: { user?: any }) {
           <Form.Item name="teacherId" label="Profesor"><Select allowClear showSearch optionFilterProp="label" placeholder="Sin asignar" options={teachers.map(t => ({ value: t.id, label: t.fullName }))} /></Form.Item>
           <Form.Item name="room" label="Aula"><Input /></Form.Item>
           <Form.Item name="capacity" label="Aforo"><InputNumber min={1} style={{ width: '100%' }} /></Form.Item>
+          <Form.Item name="billsMaillot" label="Cobra maillot" valuePropName="checked" tooltip="Si se activa, los alumnos con días en este grupo pagan el maillot (una vez al año).">
+            <Switch />
+          </Form.Item>
           <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12, marginTop: 4 }}>
             <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
               Tarifas del grupo (opcional) — si se dejan vacías, hereda la tarifa del programa o servicio

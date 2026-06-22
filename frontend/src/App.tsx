@@ -2026,7 +2026,7 @@ function Familias() {
           {`Familia — ${detail?.displayName || ''}`}
           <PresenceBar present={famPresent} />
         </span>}
-        open={!!detail} onCancel={() => setDetail(null)}
+        open={!!detail} destroyOnClose onCancel={() => setDetail(null)}
         footer={<Button onClick={() => setDetail(null)}>Cerrar</Button>} width={screens.md ? 780 : '95vw'}>
         {/* Aviso de otro usuario editando simultáneamente */}
         <EditingBadge present={famPresent} targetKey="ficha" />
@@ -2085,7 +2085,7 @@ function Familias() {
           ]} />
         <Form form={bankForm} layout="vertical" onFinish={addAccount}>
           <Row gutter={12}>
-            <Col xs={24} md={14}><Form.Item name="iban" label="IBAN" rules={[{ required: true }]}><Input placeholder="ES## #### #### #### #### ####" /></Form.Item></Col>
+            <Col xs={24} md={14}><Form.Item name="iban" label="IBAN" rules={[{ required: true }]}><Input autoComplete="off" placeholder="ES## #### #### #### #### ####" /></Form.Item></Col>
             <Col xs={24} md={10}><Form.Item name="holderName" label="Titular de la cuenta"><Input placeholder="Nombre del titular" /></Form.Item></Col>
             <Col xs={24} md={14}><Form.Item name="mandateRef" label="Referencia del mandato (opcional)"><Input placeholder="Se genera una si lo dejas vacío" /></Form.Item></Col>
             <Col xs={24} md={10}><Form.Item name="mandateDate" label="Fecha del mandato (opcional)"><Input type="date" /></Form.Item></Col>

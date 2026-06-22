@@ -16,6 +16,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       transports: ['websocket', 'polling'],
       auth: { token },
     });
+    s.io.on('reconnect_attempt', () => { s.auth = { token: getToken() }; });
     setSocket(s);
     return () => { s.disconnect(); };
   }, []);

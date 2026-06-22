@@ -15,9 +15,12 @@ export function useLiveQuery(topics: string[], reload: () => void) {
     const onChange = (msg: { topic: string }) => { if (topics.includes(msg.topic)) debounced(); };
     socket.emit('subscribe', { topics });
     socket.on('change', onChange);
+    const onConnect = () => { socket.emit('subscribe', { topics }); reloadRef.current(); };
+    socket.on('connect', onConnect);
     return () => {
       socket.emit('unsubscribe', { topics });
       socket.off('change', onChange);
+      socket.off('connect', onConnect);
     };
   }, [socket, key]); // eslint-disable-line react-hooks/exhaustive-deps
 }

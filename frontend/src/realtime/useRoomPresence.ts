@@ -14,9 +14,12 @@ export function useRoomPresence(roomKey: string | null) {
     };
     socket.on('presence', onPresence);
     socket.emit('presence:join', { roomKey });
+    const onConnect = () => { socket.emit('presence:join', { roomKey }); };
+    socket.on('connect', onConnect);
     return () => {
       socket.emit('presence:leave', { roomKey });
       socket.off('presence', onPresence);
+      socket.off('connect', onConnect);
       setPresent([]);
     };
   }, [socket, roomKey]);

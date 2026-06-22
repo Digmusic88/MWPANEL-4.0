@@ -79,7 +79,7 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
 
   // Cargar alumno en modo edición
   useEffect(() => {
-    if (!open) return;
+    if (!open) { setEditUpdatedAt(null); return; }
     if (editingStudentId) {
       api.get(`/students/${editingStudentId}/full`).then(r => {
         const d = r.data;
@@ -286,7 +286,7 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
       onSaved();
     } catch (e: any) {
       // 409 VERSION_CONFLICT: the response interceptor in api.ts already shows the warning; skip generic error.
-      if (e?.response?.status !== 409) {
+      if (e?.response?.status !== 409 || e?.response?.data?.code !== 'VERSION_CONFLICT') {
         message.error(e?.response?.data?.message || 'Error al guardar');
       }
     } finally {

@@ -29,7 +29,7 @@ api.interceptors.response.use(
   (r) => r,
   (error) => {
     if (error?.response?.status === 409 && error.response.data?.code === 'VERSION_CONFLICT') {
-      message.warning('Otro usuario cambio este registro mientras lo editabas. Recarga para ver la version actual antes de guardar.');
+      message.warning('Otro usuario cambió este registro mientras lo editabas. Recarga para ver la versión actual antes de guardar.');
     }
     return Promise.reject(error);
   },

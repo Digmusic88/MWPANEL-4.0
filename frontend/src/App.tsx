@@ -750,9 +750,13 @@ function FichaAlumno({ studentId, open, onClose }: { studentId?: string; open: b
   const [bankForm] = Form.useForm();
   const loadBank = async () => {
     if (!studentId) return;
-    const { data } = await api.get(`/students/${studentId}/bank`);
-    setBank(data);
-    bankForm.resetFields();
+    setBank(null);
+    try {
+      const { data } = await api.get(`/students/${studentId}/bank`);
+      setBank(data);
+    } finally {
+      bankForm.resetFields();
+    }
   };
   useEffect(() => {
     if (!open || !studentId) return;
@@ -776,9 +780,13 @@ function FichaAlumno({ studentId, open, onClose }: { studentId?: string; open: b
     }
   };
   const removeOverride = async () => {
-    await api.delete(`/students/${studentId}/bank-override`);
-    message.success('Override eliminado; vuelve a usarse la cuenta de la familia');
-    loadBank();
+    try {
+      await api.delete(`/students/${studentId}/bank-override`);
+      message.success('Override eliminado; vuelve a usarse la cuenta de la familia');
+      loadBank();
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || 'No se pudo eliminar el override');
+    }
   };
   const s = data?.student;
   const at = data?.attendance, tk = data?.tasks;

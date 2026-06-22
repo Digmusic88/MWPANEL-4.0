@@ -369,6 +369,7 @@ function Eventos() {
   const [editing, setEditing] = useState<any>(null);
   const [form] = Form.useForm();
   const load = async () => { const { data } = await api.get('/eventos'); setRows(data); };
+  useLiveQuery(['eventos'], load);
   useEffect(() => { load(); api.get('/catalog/groups').then(r => setGroups(r.data)).catch(() => {}); }, []);
   const openNew = () => { setEditing(null); form.resetFields(); form.setFieldsValue({ eventType: 'reunion' }); setOpen(true); };
   const openEdit = (r: any) => { setEditing(r); form.setFieldsValue({ ...r, eventDate: r.eventDate ? String(r.eventDate).slice(0, 10) : undefined }); setOpen(true); };
@@ -436,6 +437,7 @@ function Reuniones({ user }: { user?: any }) {
   const [itemForm] = Form.useForm();
   const loadList = async () => { const { data } = await api.get('/meetings'); setSheets(data); if (!sel && data.length) setSel(data[0].id); };
   const loadDetail = async (id: string) => { const { data } = await api.get(`/meetings/${id}`); setDetail(data); };
+  useLiveQuery(['meetings'], loadList);
   useEffect(() => { loadList(); api.get('/teachers').then(r => setTeachers(r.data)).catch(() => {}); }, []);
   useEffect(() => { if (sel) loadDetail(sel); }, [sel]);
   const openNew = () => { setEditing(null); form.resetFields(); form.setFieldsValue({ meetingDate: new Date().toISOString().slice(0, 10) }); setOpen(true); };
@@ -870,6 +872,7 @@ function Alumnos({ user }: { user?: any }) {
     const { data } = await api.get('/students', { params });
     setRows(data);
   };
+  useLiveQuery(['students', 'enrollments'], load);
   useEffect(() => { load(); api.get('/catalog/services').then(r => setServices(r.data)); }, [onlyPending]);
   const quick = async (v: any) => {
     try { await api.post('/students/quick-enroll', { studentName: v.studentName, phone: v.phone, serviceIds: v.serviceIds });
@@ -1109,6 +1112,7 @@ function Grupos() {
   const [editing, setEditing] = useState<any>(null);
   const [form] = Form.useForm();
   const load = async () => { const { data } = await api.get('/catalog/groups'); setRows(data); };
+  useLiveQuery(['groups'], load);
   useEffect(() => {
     load();
     api.get('/catalog/services').then(r => setServices(r.data));
@@ -1328,6 +1332,7 @@ function Matriculas({ user }: { user?: any }) {
       setRows(data);
     } finally { setLoading(false); }
   };
+  useLiveQuery(['enrollments', 'groups'], load);
   // Apuntar a un alumno EXISTENTE a otro servicio (igual que en Alumnos)
   const doAddService = async () => {
     if (!addTo || !addService) return;
@@ -2287,6 +2292,7 @@ function Documentacion() {
     try { const { data } = await api.get('/documents/matrix', { params: { serviceId: filterService } }); setColumns(data.columns); setRows(data.rows); }
     finally { setLoading(false); }
   };
+  useLiveQuery(['documents'], loadMatrix);
   const loadTypes = async () => { const { data } = await api.get('/documents/types'); setTypes(data); };
   useEffect(() => { api.get('/catalog/services').then(r => setServices(r.data)); loadTypes(); }, []);
   useEffect(() => { if (tab === 'checklist') loadMatrix(); }, [tab, filterService]);
@@ -2684,6 +2690,7 @@ function PruebasNivel() {
   const [editing, setEditing] = useState<any>(null);
   const [form] = Form.useForm();
   const load = async () => { setLoading(true); try { const { data } = await api.get('/level-tests'); setRows(data); } finally { setLoading(false); } };
+  useLiveQuery(['level_tests'], load);
   useEffect(() => { load(); api.get('/catalog/programs').then(r => setPrograms(r.data)); api.get('/teachers').then(r => setTeachers(r.data)).catch(() => {}); }, []);
   const openNew = () => { setEditing(null); form.resetFields(); form.setFieldsValue({ testDate: new Date().toISOString().slice(0, 10) }); setOpen(true); };
   const openEdit = (r: any) => {
@@ -2772,6 +2779,7 @@ function Taper() {
     try { const { data } = await api.get('/taper', { params: { period } }); setDayRate(data.dayRate); setRows(data.rows); setEdits({}); }
     finally { setLoading(false); }
   };
+  useLiveQuery(['taper'], load);
   useEffect(() => { load(); }, [period]);
   const save = async (studentId: string) => {
     const days = edits[studentId];
@@ -2896,6 +2904,7 @@ function Rifas() {
   const [bForm] = Form.useForm();
   const loadC = async () => { const { data } = await api.get('/raffles/campaigns'); setCampaigns(data); };
   const loadB = async (id: string) => { const { data } = await api.get(`/raffles/campaigns/${id}/books`); setBooks(data); };
+  useLiveQuery(['raffles'], loadC);
   useEffect(() => { loadC(); api.get('/families').then(r => setFamilies(r.data)); }, []);
   const openCampaign = async (c: any) => { setSel(c); loadB(c.id); };
   const createCampaign = async (v: any) => { try { await api.post('/raffles/campaigns', v); message.success('Campaña creada'); setCOpen(false); cForm.resetFields(); loadC(); } catch (e: any) { message.error(e?.response?.data?.message || 'Error'); } };
@@ -4226,6 +4235,7 @@ function ApoyoBoard() {
   const [overKey, setOverKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const load = async () => { setLoading(true); try { const { data } = await api.get('/apoyo/board'); setData(data); } finally { setLoading(false); } };
+  useLiveQuery(['apoyo', 'enrollments'], load);
   useEffect(() => { load(); }, []);
 
   const times: string[] = (data.slots && data.slots.length) ? data.slots : APOYO_DEFAULT_TIMES;
@@ -4534,6 +4544,7 @@ function Examenes({ user }: { user?: any }) {
   const [students, setStudents] = useState<any[]>([]);
   const [addStudent, setAddStudent] = useState<string | undefined>();
   const loadList = async () => { const { data } = await api.get('/examenes'); setList(data); };
+  useLiveQuery(['examenes'], loadList);
   useEffect(() => { loadList(); }, []);
   const openConv = async (s: any) => { setSel(s); const { data } = await api.get(`/examenes/${s.id}/candidates`); setCands(data); };
   const reloadCands = async () => { if (sel) { const { data } = await api.get(`/examenes/${sel.id}/candidates`); setCands(data); } loadList(); };
@@ -4698,6 +4709,7 @@ export default function App() {
   const [search, setSearch] = useState('');   // buscador único global (cabecera)
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.lg;
+  const { present: globalPresent } = useRoomPresence('global');
   useEffect(() => {
     if (getToken()) api.get('/auth/me').then(r => setUser(r.data)).catch(() => clearToken()).finally(() => setReady(true));
     else setReady(true);
@@ -4798,6 +4810,7 @@ export default function App() {
           <Space>
             {!isOnlyTeacher && <Tooltip title="Historial de cambios"><Button icon={<HistoryOutlined />} onClick={() => setHistoryOpen(true)} /></Tooltip>}
             {screens.md && <Text type="secondary">{user.email}</Text>}
+            <PresenceBar present={globalPresent} />
             <Button icon={<LogoutOutlined />} onClick={logout}>{screens.sm ? 'Salir' : ''}</Button>
           </Space>
         </Header>

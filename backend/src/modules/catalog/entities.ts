@@ -45,4 +45,5 @@ export class Group {
   @Column({ nullable: true }) notes: string;
   @Column({ nullable: true }) color: string;
   @Column({ name: 'sort_order', default: 0 }) sortOrder: number;
+  @Column({ name: 'bills_maillot', default: false }) billsMaillot: boolean;
 }

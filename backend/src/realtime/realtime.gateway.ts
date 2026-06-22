@@ -9,7 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StaffRole } from '../common/staff-role.entity';
 import { authenticateSocketToken, SocketUser } from './realtime.auth';
-import { PresenceRegistry, Presence } from './presence.registry';
+import { PresenceRegistry } from './presence.registry';
 import { isValidTopic } from './realtime.topics';
 
 @WebSocketGateway({
@@ -68,7 +68,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   onPresenceLeave(@ConnectedSocket() client: Socket, @MessageBody() body: { roomKey: string }) {
     if (!body?.roomKey) return;
     client.leave(body.roomKey);
-    this.registry.leave(client.id); // simplificacion: re-join al cambiar de pantalla
+    this.registry.leaveRoom(client.id, body.roomKey);
     this.server.to(body.roomKey).emit('presence', { roomKey: body.roomKey, present: this.registry.list(body.roomKey) });
   }
 

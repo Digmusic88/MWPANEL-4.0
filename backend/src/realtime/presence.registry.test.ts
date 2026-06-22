@@ -35,3 +35,12 @@ test('un mismo usuario en dos pestanas se deduplica por userId', () => {
   r.join('student:1', 'sockB', 'u1', 'Ana');
   assert.equal(r.list('student:1').length, 1);
 });
+
+test('leaveRoom solo saca del room indicado, no de los demas', () => {
+  const r = new PresenceRegistry();
+  r.join('roomA', 'sockA', 'u1', 'Ana');
+  r.join('roomB', 'sockA', 'u1', 'Ana');
+  r.leaveRoom('sockA', 'roomA');
+  assert.deepEqual(r.list('roomA'), []);
+  assert.equal(r.list('roomB').length, 1);
+});

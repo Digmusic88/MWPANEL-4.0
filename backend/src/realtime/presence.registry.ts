@@ -15,6 +15,17 @@ export class PresenceRegistry {
     this.bySocket.set(socketId, entries);
   }
 
+  leaveRoom(socketId: string, roomKey: string): void {
+    const entries = this.bySocket.get(socketId);
+    if (!entries) return;
+    const remaining = entries.filter(e => e.roomKey !== roomKey);
+    if (remaining.length === 0) {
+      this.bySocket.delete(socketId);
+    } else {
+      this.bySocket.set(socketId, remaining);
+    }
+  }
+
   leave(socketId: string): string[] {
     const entries = this.bySocket.get(socketId) ?? [];
     const affected = entries.map(e => e.roomKey);

@@ -6,6 +6,9 @@ import { SecretariaAuthGuard, Roles } from '../../common/secretaria-auth.guard';
 
 const METHODS = ['efectivo','transferencia','domiciliacion','bizum','tpv'];
 
+// Descuento por hermanos: 5€ por cada hermano adicional (alumno matriculado) de la familia, por mes.
+const SIBLING_DISCOUNT_EUR = 5;
+
 class GenerateDto { @IsUUID() academicYearId: string; @IsString() period: string; @IsOptional() @IsUUID() serviceId?: string; }
 class GenerateCourseDto { @IsUUID() academicYearId: string; @IsOptional() @IsUUID() serviceId?: string; }
 class PayChargeDto {
@@ -164,7 +167,23 @@ export class PaymentsController {
       byEnroll[c.enrollmentId][k] = c;
     }
     const rows = students.map((s: any) => ({ ...s, cells: byEnroll[s.enrollmentId] || {} }));
-    return { columns, rows };
+    // Descuento por hermanos: una fila por familia (presente en la vista) con ≥2 alumnos matriculados.
+    // El conteo de hermanos cruza todos los servicios, aunque la matriz esté filtrada por uno.
+    const famIds = [...new Set(students.map((s: any) => s.familyId).filter(Boolean))];
+    let discountRows: any[] = [];
+    if (famIds.length) {
+      const fams = await this.ds.query(`
+        SELECT f.id AS "familyId", f.display_name AS "familyName",
+               (SELECT count(DISTINCT st2.id) FROM secretaria.students st2
+                  JOIN secretaria.enrollments e2 ON e2.student_id=st2.id
+                 WHERE st2.family_id=f.id AND e2.status='matriculado' AND e2.academic_year_id=$1) AS "siblingCount"
+        FROM secretaria.families f WHERE f.id = ANY($2)`, [yearId, famIds]);
+      discountRows = fams
+        .filter((f: any) => Number(f.siblingCount) >= 2)
+        .map((f: any) => ({ familyId: f.familyId, familyName: f.familyName, monthly: SIBLING_DISCOUNT_EUR * (Number(f.siblingCount) - 1) }))
+        .sort((a: any, b: any) => (a.familyName || '').localeCompare(b.familyName || ''));
+    }
+    return { columns, rows, discountRows };
   }
 
   // Registrar el cobro de un recibo concreto (clic en la celda)
@@ -321,9 +340,13 @@ export class PaymentsController {
   // Morosidad: recibos pendientes agrupados por familia, con contacto para reclamar
   @Get('overdue') @Roles('secretaria_admin','secretaria_staff','direccion')
   async overdue(@Query('academicYearId') yearId: string) {
-    return this.ds.query(`
+    const rows = await this.ds.query(`
       SELECT f.id AS "familyId", f.display_name AS "familyName",
              count(c.id) AS "pendingCount", sum(c.amount_due) AS "totalDue",
+             count(DISTINCT c.period) FILTER (WHERE c.concept='mensualidad') AS "pendingMonths",
+             (SELECT count(DISTINCT st2.id) FROM secretaria.students st2
+                JOIN secretaria.enrollments e2 ON e2.student_id=st2.id
+               WHERE st2.family_id=f.id AND e2.status='matriculado' AND e2.academic_year_id=$1) AS "siblingCount",
              (SELECT string_agg(DISTINCT g2.full_name, ', ') FROM secretaria.guardians g2 WHERE g2.family_id=f.id) AS "guardians",
              (SELECT string_agg(DISTINCT g2.phone, ', ') FROM secretaria.guardians g2 WHERE g2.family_id=f.id AND g2.phone IS NOT NULL) AS "phones",
              (SELECT string_agg(DISTINCT g2.email, ', ') FROM secretaria.guardians g2 WHERE g2.family_id=f.id AND g2.email IS NOT NULL) AS "emails"
@@ -333,6 +356,15 @@ export class PaymentsController {
       JOIN secretaria.families f ON f.id=st.family_id
       WHERE e.academic_year_id=$1 AND c.status='pendiente'
         AND e.status='matriculado'  -- preinscrito/lista de espera no son morosidad (no hay pago obligatorio)
-      GROUP BY f.id, f.display_name ORDER BY "totalDue" DESC`, [yearId]);
+      GROUP BY f.id, f.display_name`, [yearId]);
+    // Descuento por hermanos (5€ por hermano adicional, por cada mes pendiente). Dinámico.
+    return rows.map((r: any) => {
+      const siblings = Number(r.siblingCount) || 0;
+      const siblingDiscountMonthly = SIBLING_DISCOUNT_EUR * Math.max(0, siblings - 1);
+      const pendingMonths = Number(r.pendingMonths) || 0;
+      const siblingDiscountTotal = siblingDiscountMonthly * pendingMonths;
+      const totalDue = Number(r.totalDue) || 0;
+      return { ...r, siblingDiscountMonthly, siblingDiscountTotal, netDue: Math.max(0, totalDue - siblingDiscountTotal) };
+    }).sort((a: any, b: any) => b.netDue - a.netDue);
   }
 }

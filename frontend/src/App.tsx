@@ -866,14 +866,16 @@ function Alumnos({ user }: { user?: any }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [onlyPending, setOnlyPending] = useState(false);
+  const [category, setCategory] = useState('');
   const load = async () => {
     const params: any = {};
     if (onlyPending) params.pending = 'true';
+    if (category) params.category = category;
     const { data } = await api.get('/students', { params });
     setRows(data);
   };
   useLiveQuery(['students', 'enrollments'], load);
-  useEffect(() => { load(); api.get('/catalog/services').then(r => setServices(r.data)); }, [onlyPending]);
+  useEffect(() => { load(); api.get('/catalog/services').then(r => setServices(r.data)); }, [onlyPending, category]);
   const quick = async (v: any) => {
     try { await api.post('/students/quick-enroll', { studentName: v.studentName, phone: v.phone, serviceIds: v.serviceIds });
       message.success('Alumno dado de alta'); setOpen(false); form.resetFields(); load(); }
@@ -894,6 +896,18 @@ function Alumnos({ user }: { user?: any }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Title level={3} style={{ margin: 0 }}>Alumnos</Title>
         <Space>
+          <Select
+            value={category}
+            onChange={setCategory}
+            style={{ width: 190 }}
+            options={[
+              { value: '', label: 'Todas las categorías' },
+              { value: 'matriculado', label: 'Matriculado' },
+              { value: 'pendiente', label: 'Pendiente' },
+              { value: 'lista_espera', label: 'Lista de espera' },
+              { value: 'preinscrito', label: 'Preinscrito' },
+            ]}
+          />
           <Button
             icon={<FilterOutlined />}
             type={onlyPending ? 'primary' : 'default'}
@@ -923,6 +937,10 @@ function Alumnos({ user }: { user?: any }) {
           columns={[
             { title: 'Nombre', render: (_, r) => `${r.firstName || ''} ${r.lastName || ''}`.trim() || '—' },
             { title: 'Origen', dataIndex: 'mwpanelStudentId', render: (v) => v ? <Tag color="purple">Escuela (MW Panel)</Tag> : <Tag>Academia</Tag> },
+            { title: 'Categoría', dataIndex: 'category', render: (c: string) => {
+                const meta = STATUS_META[c];
+                return meta ? <Tag color={meta.color}>{meta.label}</Tag> : <Tag>Sin inscripción</Tag>;
+              } },
             { title: 'Servicios y grupos', dataIndex: 'enrollments', render: (e: any[]) => (e && e.length)
                 ? <Space size={4} wrap>{e.map((en: any) => {
                     const col = en.status === 'matriculado' ? 'green' : en.status === 'preinscrito' ? 'gold' : en.status === 'lista_espera' ? 'orange' : en.status === 'pendiente' ? 'blue' : 'default';
@@ -1786,6 +1804,9 @@ function Pagos() {
   };
 
   const renderCell = (col: any, r: any) => {
+    if (r._discount) return col.concept === 'mensualidad'
+      ? <Text style={{ color: '#C43030', fontWeight: 500 }}>−{r.monthly}€</Text>
+      : null;
     if (!columnApplies(col, r)) return <Tooltip title="Este programa no cobra este concepto/mes"><span style={{ color: '#d9d9d9' }}>—</span></Tooltip>;
     const factor = col.mm ? factorOf(r.monthBilling, col.mm) : 1;
     const partial = col.mm && factor < 1 ? ` (${factor === 0.5 ? 'medio mes' : `×${factor}`})` : '';
@@ -1842,7 +1863,7 @@ function Pagos() {
           <Button onClick={() => { setGenMonth(undefined); setGenOpen(true); }}>Generar recibos del mes</Button>
           <Button onClick={load}>Actualizar</Button>
         </Space>
-        <SearchableTable rowKey="enrollmentId" dataSource={data.rows} loading={loading} columns={cols} pagination={{ pageSize: 20 }} scroll={{ x: 'max-content' }} size="small" />
+        <SearchableTable rowKey="enrollmentId" dataSource={[...(data.rows || []), ...(data.discountRows || []).map((d: any) => ({ enrollmentId: 'disc-' + d.familyId, _discount: true, studentName: `Descuento hermanos · ${d.familyName}`, monthly: d.monthly }))]} loading={loading} columns={cols} pagination={{ pageSize: 20 }} scroll={{ x: 'max-content' }} size="small" />
       </Card>
 
       <Modal title="Generar recibos del curso completo" open={genCourseOpen} onCancel={() => setGenCourseOpen(false)} onOk={doGenerateCourse} okText="Generar curso">
@@ -1904,6 +1925,7 @@ function Morosidad() {
   useEffect(() => { api.get('/catalog/years').then(r => setYears(r.data)); }, []);
   useEffect(() => { if (years.length) load(); }, [years]);
   const totalDeuda = rows.reduce((a, r) => a + Number(r.totalDue || 0), 0);
+  const totalNeto = rows.reduce((a, r) => a + Number(r.netDue ?? r.totalDue ?? 0), 0);
   return (
     <div>
       <Title level={3}>Morosidad</Title>
@@ -1914,7 +1936,8 @@ function Morosidad() {
       </Ayuda>
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col xs={12} md={8}><Card><Statistic title="Familias con deuda" value={rows.length} prefix={<WarningOutlined />} /></Card></Col>
-        <Col xs={12} md={8}><Card><Statistic title="Deuda total" value={totalDeuda} precision={2} suffix="€" valueStyle={{ color: '#cf1322' }} /></Card></Col>
+        <Col xs={12} md={8}><Card><Statistic title="Deuda total (bruta)" value={totalDeuda} precision={2} suffix="€" /></Card></Col>
+        <Col xs={12} md={8}><Card><Statistic title="Deuda neta (con descuento hermanos)" value={totalNeto} precision={2} suffix="€" valueStyle={{ color: '#cf1322' }} /></Card></Col>
       </Row>
       <Card>
         <SearchableTable rowKey="familyId" dataSource={rows} loading={loading} pagination={{ pageSize: 15 }}
@@ -1924,9 +1947,14 @@ function Morosidad() {
             { title: 'Teléfonos', dataIndex: 'phones', render: (p) => p || '—' },
             { title: 'Correos', dataIndex: 'emails', render: (e) => e || '—' },
             { title: 'Recibos pendientes', dataIndex: 'pendingCount', align: 'center', sorter: (a, b) => a.pendingCount - b.pendingCount },
-            { title: 'Deuda', dataIndex: 'totalDue', align: 'right', defaultSortOrder: 'descend',
+            { title: 'Deuda', dataIndex: 'totalDue', align: 'right',
               sorter: (a, b) => Number(a.totalDue) - Number(b.totalDue),
-              render: (d) => <b style={{ color: '#cf1322' }}>{Number(d).toFixed(2)} €</b> },
+              render: (d) => <span>{Number(d).toFixed(2)} €</span> },
+            { title: 'Desc. hermanos', dataIndex: 'siblingDiscountTotal', align: 'right',
+              render: (d) => Number(d) > 0 ? <span style={{ color: '#579172' }}>−{Number(d).toFixed(2)} €</span> : '—' },
+            { title: 'Deuda neta', dataIndex: 'netDue', align: 'right', defaultSortOrder: 'descend',
+              sorter: (a, b) => Number(a.netDue ?? a.totalDue) - Number(b.netDue ?? b.totalDue),
+              render: (d, r) => <b style={{ color: '#cf1322' }}>{Number(d ?? r.totalDue).toFixed(2)} €</b> },
           ]} />
       </Card>
     </div>

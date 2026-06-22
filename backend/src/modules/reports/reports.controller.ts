@@ -174,6 +174,21 @@ export class ReportsController {
     ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 2, c: 0 }, e: { r: 2, c: 7 } }) };
     XLSX.utils.book_append_sheet(wb, ws, 'Cobros');
 
+    // Descuento por hermanos (informativo): 5€ por hermano adicional × meses del rango.
+    const discRow = await this.ds.query(`
+      SELECT COALESCE(SUM(sc - 1), 0)::int * 5 AS monthly FROM (
+        SELECT count(DISTINCT st.id) AS sc
+        FROM secretaria.students st JOIN secretaria.enrollments e ON e.student_id=st.id
+        WHERE e.status='matriculado'
+        GROUP BY st.family_id HAVING count(DISTINCT st.id) >= 2
+      ) z`);
+    const discMonthly = Number(discRow[0]?.monthly || 0);
+    const monthsInRange = (() => {
+      const a = new Date(f), b = new Date(t);
+      return Math.max(1, (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()) + 1);
+    })();
+    const discTotal = discMonthly * monthsInRange;
+
     // --- Hoja 2: Resumen ---
     const sumBy = (keyFn: (r: any) => string) => {
       const m: Record<string, number> = {};
@@ -188,6 +203,9 @@ export class ReportsController {
       ...block('Por concepto', sumBy(r => CONCEPT_LABEL[r.concepto] || r.concepto)),
       ...block('Por método de pago', sumBy(r => METHOD_LABEL[r.metodo] || r.metodo)),
       ...block('Por servicio', sumBy(r => r.servicio)),
+      ['Descuento por hermanos (informativo)', ''],
+      [`5€/hermano adicional × ${monthsInRange} mes(es)`, -Number(discTotal.toFixed(2))],
+      [],
     ];
     const ws2 = XLSX.utils.aoa_to_sheet(resumen);
     ws2['!cols'] = [{ wch: 26 }, { wch: 14 }];

@@ -252,18 +252,22 @@ export class StudentsController {
           params.push(id);
           const idParam = params.length;
           if (b.expectedUpdatedAt) {
-            params.push(b.expectedUpdatedAt);
-            const verParam = params.length;
-            const updated = await m.query(
-              `UPDATE secretaria.students SET ${sets.join(',')} WHERE id=$${idParam} AND updated_at=$${verParam} RETURNING id`,
-              params);
-            if (!updated || updated.length === 0) {
+            // Comparacion de version en JS (robusta: no depende del shape de retorno de UPDATE en TypeORM).
+            // SELECT ... FOR UPDATE bloquea la fila hasta el final de la transaccion, evitando carreras.
+            const rows = await m.query(`SELECT updated_at FROM secretaria.students WHERE id=$1 FOR UPDATE`, [id]);
+            if (!rows || rows.length === 0) {
+              throw new VersionConflictException(null);
+            }
+            const current = new Date(rows[0].updated_at).getTime();
+            const expected = new Date(b.expectedUpdatedAt).getTime();
+            if (current !== expected) {
               const [cur] = await m.query(`SELECT * FROM secretaria.students WHERE id=$1`, [id]);
               throw new VersionConflictException(cur ?? null);
             }
-          } else {
-            await m.query(`UPDATE secretaria.students SET ${sets.join(',')} WHERE id=$${idParam}`, params);
           }
+          // Aplicar el UPDATE (incondicional; el trigger BEFORE UPDATE sube updated_at).
+          // `params` ya tiene los valores de columnas + id; idParam apunta al id.
+          await m.query(`UPDATE secretaria.students SET ${sets.join(',')} WHERE id=$${idParam}`, params);
         }
       }
 

@@ -1863,7 +1863,7 @@ function Familias() {
   const loadList = () => api.get('/families').then(r => setRows(r.data));
   useEffect(() => { loadList(); api.get('/students').then(r => setAllStudents(r.data)).catch(() => {}); }, []);
   const { present: famPresent, startEditing: famStartEditing } = useRoomPresence(detail ? `family:${detail.id}` : null);
-  useEffect(() => { if (detail) famStartEditing('ficha'); }, [detail?.id]);
+  useEffect(() => { if (detail) famStartEditing('ficha'); }, [detail?.id, famStartEditing]);
   const attachExisting = async () => {
     if (!linkStudentId) return;
     try { await api.post(`/families/${detail.id}/attach-student`, { studentId: linkStudentId }); message.success('Hermano/a vinculado a la familia'); setLinkStudentId(undefined); reloadDetail(); api.get('/students').then(r => setAllStudents(r.data)); }

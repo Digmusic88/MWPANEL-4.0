@@ -63,7 +63,7 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
     if (open && editingStudentId) {
       startEditing('ficha');
     }
-  }, [open, editingStudentId]);
+  }, [open, editingStudentId, startEditing]);
 
   const enrollmentsWatch: any[] = Form.useWatch('enrollments', form) || [];
   const matriculaAmountWatch = Form.useWatch('matriculaAmount', form);

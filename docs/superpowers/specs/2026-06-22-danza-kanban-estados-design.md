@@ -28,8 +28,10 @@ Borra TODAS las `danza_assignments` de ese (enrollment, group) de un golpe; mant
 
 ## 2. Frontend — `DanzaBoard` reescrito como kanban
 - Layout: columna **"Bolsa / Sin asignar"** (alumnos con `totalDays===0`) + **una columna por grupo**.
-- Cada alumno = **tarjeta en cada grupo al que asiste** (los que sus assignments incluyen ese `groupId`); tarjeta coloreada por `ORG_STATUS[status]`, mostrando los **días en ese grupo** (`DOW[weekday] HH:MM`) y 💬 si hay comentario. En la bolsa, tarjeta sin días.
+- **Scroll interno por columna**: la bolsa y cada columna-grupo tienen **altura acotada con scroll vertical interno** (p.ej. `maxHeight: '70vh', overflowY: 'auto'`), para que con muchos alumnos (50+) la columna no se estire y se pueda arrastrar el último a un grupo de arriba sin recorrer toda la página. Las cabeceras de columna quedan visibles.
+- Cada alumno = **tarjeta en cada grupo al que asiste** (los que sus assignments incluyen ese `groupId`); tarjeta coloreada por `ORG_STATUS[status]`, mostrando los **días en ese grupo** (`DOW[weekday] HH:MM`) y 💬 si hay comentario. En la bolsa, tarjeta sin días. **Todas las tarjetas son arrastrables** (bolsa y grupos), no solo las de la bolsa.
 - **Colocación con selector de días**: arrastrar un alumno a una columna-grupo abre `DanzaDaysModal(group, student)` con las **franjas del grupo como casillas** (marcadas = días actuales del alumno en ese grupo). Al confirmar, **sincroniza**: por cada franja marcada sin assignment → `POST /danza/assign`; por cada assignment desmarcado → `DELETE /danza/assignment/:id`. El mismo modal se abre desde la tarjeta (clic) o ⋯ → "Editar días".
+- **Arrastre = MOVER** (no copiar): si la alumna se arrastra desde OTRO grupo (la tarjeta venía de un grupo origen distinto al destino), tras confirmar los días del destino se **quitan sus días del grupo origen** (`DELETE /danza/assignments?enrollmentId&groupId=origen`). Resultado: pasa del grupo A al B. Para tenerla en dos grupos a la vez, se arrastra desde la **bolsa** (no quita de ningún grupo) o se usa ⋯ → "Editar días" en cada grupo. Arrastrar dentro del MISMO grupo o a la bolsa no aplica el borrado de origen (la bolsa no es un grupo).
 - Menú **⋯** por tarjeta: **Matricular / Preinscribir / Lista de espera** (`PATCH /enrollments/:id {status}`), **Comentario** (`window.prompt` → `PATCH … {notes}`, igual que el kanban), **Quitar del grupo** (`DELETE /danza/assignments?enrollmentId&groupId`). Tras cada acción, recarga (y el topic `danza`/`enrollments` refresca en vivo).
 - Mantener un **resumen** compacto (tabla o pie de tarjeta) con total de días + mensualidad resuelta (o "sin tramo") + maillot. La columna "Tramos de tarifa" sigue.
 - `useLiveQuery(['enrollments','groups','danza'], load)` (ya está).
@@ -54,6 +56,8 @@ Borra TODAS las `danza_assignments` de ese (enrollment, group) de un golpe; mant
 - Arrastrar una alumna de la bolsa a un grupo → selector de días → al confirmar, aparece como tarjeta en ese grupo con esos días; su mensualidad por tramo se recalcula.
 - Cambiar su estado a "Matriculado" desde ⋯ → tarjeta verde ✓; aparece en Pagos con su mensualidad por tramo, maillot (si el grupo lo cobra) y el tag "N días".
 - Una alumna en 2 grupos aparece como tarjeta en ambos; "Quitar del grupo" en uno la deja solo en el otro; quitar de todos → vuelve a la bolsa.
+- **Arrastrar una alumna YA asignada del grupo A al grupo B** (selector de días de B) → queda solo en B (se le quitan los días de A). Arrastrar desde la bolsa a un grupo NO la quita de otros grupos.
+- La columna "Sin asignar" con 50 alumnos **no estira la página**: tiene scroll vertical interno; se puede arrastrar el último a un grupo de la parte alta.
 - Comentario por ⋯ → 💬 en todas sus tarjetas.
 - Lista de espera → tarjeta naranja; no genera recibos (Pagos solo matriculados).
 - Refresco en vivo entre dos sesiones (topic `danza`).

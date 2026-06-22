@@ -2,7 +2,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { Client } from 'pg';
 import { RealtimeGateway } from './realtime.gateway';
-import { topicForTable } from './realtime.topics';
+import { topicForTable, topicsWithoutTrigger } from './realtime.topics';
 
 @Injectable()
 export class ChangeFeedService implements OnModuleInit, OnModuleDestroy {
@@ -41,6 +41,27 @@ export class ChangeFeedService implements OnModuleInit, OnModuleDestroy {
       await this.client.connect();
       await this.client.query('LISTEN secretaria_changes');
       this.log.log('Escuchando secretaria_changes');
+      // One-time startup check: warn if any mapped topic has no pg_notify trigger
+      try {
+        const rows = await this.client.query(
+          `SELECT DISTINCT c.relname AS t
+             FROM pg_trigger tg
+             JOIN pg_class c ON c.oid = tg.tgrelid
+             JOIN pg_namespace n ON n.oid = c.relnamespace
+             JOIN pg_proc p ON p.oid = tg.tgfoid
+            WHERE n.nspname = 'secretaria'
+              AND p.proname IN ('fn_audit','fn_notify_change')
+              AND NOT tg.tgisinternal`);
+        const triggered = rows.rows.map((r: any) => r.t);
+        const missing = topicsWithoutTrigger(triggered);
+        if (missing.length) {
+          this.log.warn(
+            `Topics de tiempo real SIN trigger NOTIFY (no refrescaran en vivo): ${missing.join(', ')}. Anade fn_audit o fn_notify_change a sus tablas.`,
+          );
+        }
+      } catch (e: any) {
+        this.log.warn(`No se pudo verificar drift topic/trigger: ${e.message}`);
+      }
     } catch (e: any) {
       this.log.error(`No se pudo conectar LISTEN: ${e.message}`);
       this.reconnect();

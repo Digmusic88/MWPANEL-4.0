@@ -66,6 +66,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   @SubscribeMessage('presence:leave')
   onPresenceLeave(@ConnectedSocket() client: Socket, @MessageBody() body: { roomKey: string }) {
+    if (!client.data.user) return;
     if (!body?.roomKey) return;
     client.leave(body.roomKey);
     this.registry.leaveRoom(client.id, body.roomKey);
@@ -74,6 +75,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   @SubscribeMessage('edit:start')
   onEditStart(@ConnectedSocket() client: Socket, @MessageBody() body: { roomKey: string; targetKey: string }) {
+    if (!client.data.user) return;
     if (!body?.roomKey) return;
     this.registry.setEditing(client.id, body.roomKey, body.targetKey ?? null);
     this.server.to(body.roomKey).emit('presence', { roomKey: body.roomKey, present: this.registry.list(body.roomKey) });
@@ -81,6 +83,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   @SubscribeMessage('edit:stop')
   onEditStop(@ConnectedSocket() client: Socket, @MessageBody() body: { roomKey: string }) {
+    if (!client.data.user) return;
     if (!body?.roomKey) return;
     this.registry.setEditing(client.id, body.roomKey, null);
     this.server.to(body.roomKey).emit('presence', { roomKey: body.roomKey, present: this.registry.list(body.roomKey) });

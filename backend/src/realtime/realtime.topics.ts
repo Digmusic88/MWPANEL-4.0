@@ -37,6 +37,9 @@ const TABLE_TO_TOPIC: Record<string, ChangeTopic> = {
 
 export const ALL_TOPICS: readonly string[] = Array.from(new Set(Object.values(TABLE_TO_TOPIC)));
 
+/** All table names that appear in the table→topic map. */
+export const ALL_SOURCE_TABLES: readonly string[] = Object.keys(TABLE_TO_TOPIC);
+
 export function topicForTable(tableName: string): ChangeTopic | null {
   return Object.prototype.hasOwnProperty.call(TABLE_TO_TOPIC, tableName)
     ? TABLE_TO_TOPIC[tableName]
@@ -45,4 +48,24 @@ export function topicForTable(tableName: string): ChangeTopic | null {
 
 export function isValidTopic(topic: string): boolean {
   return ALL_TOPICS.includes(topic);
+}
+
+/**
+ * Returns the list of topics for which NONE of their source tables appears in
+ * `triggeredTables`. A topic is "covered" if at least one of its source tables
+ * fires a NOTIFY. Result is sorted and deduplicated.
+ */
+export function topicsWithoutTrigger(triggeredTables: string[]): string[] {
+  const triggeredSet = new Set(triggeredTables);
+  const missing = new Set<string>();
+  for (const topic of ALL_TOPICS) {
+    // Collect all source tables mapped to this topic
+    const sources = Object.entries(TABLE_TO_TOPIC)
+      .filter(([, t]) => t === topic)
+      .map(([table]) => table);
+    // If none of the source tables is in triggeredSet, the topic is missing
+    const covered = sources.some((table) => triggeredSet.has(table));
+    if (!covered) missing.add(topic);
+  }
+  return Array.from(missing).sort();
 }

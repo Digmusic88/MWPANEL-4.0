@@ -100,8 +100,10 @@ export class MocksController {
         byCall[r.examCallId] = byCall[r.examCallId] || { examName: r.examName, examDate: r.examDate, academicYear: r.academicYear || null, parts: [] };
         byCall[r.examCallId].parts.push({ part: r.part, score: r.score, status: r.status });
       }
+      const isNP = (p: any) => p.status === 'NOT_PRESENTED' || p.status === 'ABSENT';
       const calls = Object.values(byCall).map((c: any) => {
-        const scored = c.parts.filter((p: any) => typeof p.score === 'number');
+        // Excluir partes NP del overall aunque tengan score=0 en la BD (no se cuentan como 0)
+        const scored = c.parts.filter((p: any) => typeof p.score === 'number' && !isNP(p));
         const overall = scored.length ? Math.round((scored.reduce((a: number, p: any) => a + p.score, 0) / scored.length) * 10) / 10 : null;
         return { ...c, overall };
       });

@@ -46,7 +46,7 @@ function Login({ onLogin }: { onLogin: (u: any) => void }) {
       background: '#FAFAF8', backgroundImage: 'radial-gradient(circle at 1px 1px, #E2DDD8 1px, transparent 0)', backgroundSize: '28px 28px' }}>
       <Card style={{ width: 390, boxShadow: '0 8px 24px -4px rgba(30,30,48,0.10), 0 4px 12px -2px rgba(30,30,48,0.06)' }}>
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
-          <img src="/logo.svg" alt="Mundo World" style={{ width: 56, height: 56, objectFit: 'contain', marginBottom: 12 }} />
+          <img src="/logo-secretaria.png" alt="Mundo World" style={{ width: 56, height: 56, objectFit: 'contain', marginBottom: 12 }} />
           <Title level={3} style={{ marginBottom: 0 }}>Secretaría</Title>
           <Text type="secondary" style={{ letterSpacing: '0.03em' }}>Mundo World</Text>
         </div>
@@ -5358,7 +5358,7 @@ export default function App() {
   const openGroup = GROUPS.find(g => g.children.includes(safeView))?.key;
   const brand = (
     <div style={{ padding: '16px 16px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
-      <img src="/logo.svg" alt="" style={{ width: 30, height: 30, objectFit: 'contain' }} />
+      <img src="/logo-secretaria.png" alt="" style={{ width: 30, height: 30, objectFit: 'contain' }} />
       <span style={{ fontWeight: 700, fontSize: 17, fontFamily: "'Lora', Georgia, serif", color: '#1E1E30' }}>Secretaría</span>
     </div>
   );

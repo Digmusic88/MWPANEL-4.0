@@ -62,7 +62,7 @@ export class ApoyoController {
       WHERE a.enrollment_id=$1 ORDER BY a.weekday, a.slot_time`, [enrollmentId]);
     const meta = await this.ds.query(`SELECT apoyo_level AS "apoyoLevel", secretaria.fn_resolve_monthly_fee(id) AS monthly FROM secretaria.enrollments WHERE id=$1`, [enrollmentId]);
     const totalHours = assignments.reduce((sum: number, a: any) => sum + Number(a.hours || 0), 0);
-    return { apoyoLevel: meta[0]?.apoyoLevel || null, monthly: meta[0]?.monthly ?? null, totalHours, assignments };
+    return { apoyoLevel: meta[0]?.apoyoLevel ?? null, monthly: meta[0]?.monthly ?? null, totalHours, assignments };
   }
 
   // Asignar (o actualizar horas de) un alumno a una franja de un grupo

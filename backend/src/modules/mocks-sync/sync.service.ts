@@ -38,7 +38,8 @@ export class SyncService {
                 p.mock_exam_type AS "examType",
                 s.id::text    AS "studentExternalId",
                 COALESCE(NULLIF(TRIM(s.first_name), ''), va.first_name) AS "firstName",
-                COALESCE(NULLIF(TRIM(s.last_name),  ''), va.last_name)  AS "lastName"
+                COALESCE(NULLIF(TRIM(s.last_name),  ''), va.last_name)  AS "lastName",
+                s.mock_user_id AS "mockUserId"
          FROM secretaria.groups g
          JOIN secretaria.programs p ON p.id = g.program_id
          JOIN secretaria.academic_years ay ON ay.id = g.academic_year_id AND ay.is_active = true

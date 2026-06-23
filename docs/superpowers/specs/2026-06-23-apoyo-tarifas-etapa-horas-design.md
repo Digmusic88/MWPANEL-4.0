@@ -166,14 +166,18 @@ Apoyo, esos flujos cogen automáticamente la nueva tarifa. **No se tocan** los e
 plan detecte un punto donde se asuma grupo/programa para Apoyo.
 
 ## 5. Migración de datos existente
-- Matrículas de Apoyo actuales tienen `apoyo_level = NULL` → su mensualidad seguirá saliendo "revisar"
-  hasta que se les asigne etapa. **No se auto-deduce** del texto libre `grade_label` (frágil); se deja
-  para que Secretaría asigne etapa desde el tablero. (Si el usuario quiere un mejor-esfuerzo de
-  pre-relleno desde `grade_label`, se decide en revisión del plan; por defecto **no**.)
+- Matrículas de Apoyo actuales tienen `apoyo_level = NULL` → su mensualidad saldrá "revisar" hasta que
+  Secretaría les **asigne la etapa a mano** desde el tablero. **Decisión confirmada: NO se auto-deduce**
+  del texto libre `grade_label` (frágil). El tablero debe dejar visibles/filtrar los alumnos de Apoyo
+  sin etapa para poder asignarla cómodamente.
 - `apoyo_assignments.hours` existentes → `1` por defecto (DEFAULT de la columna).
-- Sembrar `apoyo_fee_tiers` con los precios actuales como punto de partida (mensualidad 1 h:
-  primaria 68 / secundaria 75 / bachillerato 95) **opcional**, a confirmar; lo natural es que el usuario
-  los configure desde "Tarifas de Apoyo".
+- **Siembra confirmada**: insertar en `apoyo_fee_tiers` los precios actuales en el tramo de **2 horas**,
+  concepto `mensualidad`, para el año académico activo:
+  - (activo, primaria, mensualidad, **2**, 68,00)
+  - (activo, secundaria, mensualidad, **2**, 75,00)
+  - (activo, bachillerato, mensualidad, **2**, 95,00)
+  El resto de tramos (1 h, 3 h y demás casuísticas) y los conceptos matrícula/material se configurarán
+  después desde "Tarifas de Apoyo". (La siembra usa el año académico con `is_active = true`.)
 
 ## 6. Despliegue (crítico)
 1. **Aplicar la migración `036_apoyo_fees.sql` ANTES de reconstruir** el backend de Secretaría

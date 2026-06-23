@@ -4,6 +4,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { SecretariaAuthGuard, Roles } from '../../common/secretaria-auth.guard';
 import * as fs from 'fs';
+import { computeMockMetrics, RawCall } from './mock-metrics';
 
 // Lectura SOLO LECTURA de la BD SQLite de Cambridge Mocks (regla: nunca modificar Mocks).
 const MOCKS_DB = process.env.MOCKS_DB_PATH || '/mocks/database.db';
@@ -30,6 +31,31 @@ class LinkDto { @IsUUID() studentId: string; @IsInt() mockUserId: number; }
 @UseGuards(SecretariaAuthGuard)
 export class MocksController {
   constructor(@InjectDataSource() private ds: DataSource) {}
+
+  private readonly EXAM_LABELS: Record<string, string> = {
+    A2_KEY: 'A2 Key',
+    B1_PET: 'B1 Preliminary (PET)',
+    B2_FIRST: 'B2 First (FCE)',
+    C1_CAE: 'C1 Advanced (CAE)',
+    C2_CPE: 'C2 Proficiency (CPE)',
+  };
+
+  private async resolveTargetLevel(mockUserId: number): Promise<{ code: string; label: string } | null> {
+    const rows = await this.ds.query(
+      `SELECT p.mock_exam_type AS code
+       FROM secretaria.students s
+       JOIN secretaria.enrollments e ON e.student_id = s.id AND e.status = 'matriculado'
+       JOIN secretaria.groups g ON g.id = e.group_id
+       JOIN secretaria.programs p ON p.id = g.program_id
+       JOIN secretaria.academic_years ay ON ay.id = g.academic_year_id AND ay.is_active = true
+       WHERE s.mock_user_id = $1 AND p.mock_exam_type IS NOT NULL
+       LIMIT 1`,
+      [mockUserId],
+    );
+    if (!rows.length) return null;
+    const code = rows[0].code as string;
+    return { code, label: this.EXAM_LABELS[code] || code };
+  }
 
   // Lista de alumnos de Cambridge Mocks (con nº de resultados) + a qué alumno de secretaría están enlazados
   @Get('students') @Roles('secretaria_admin','secretaria_staff','direccion')
@@ -73,7 +99,10 @@ export class MocksController {
         const overall = scored.length ? Math.round((scored.reduce((a: number, p: any) => a + p.score, 0) / scored.length) * 10) / 10 : null;
         return { ...c, overall };
       });
-      return { fullName: u?.fullName || '', calls };
+      const rawCalls: RawCall[] = calls as RawCall[];
+      const metrics = computeMockMetrics(rawCalls);
+      const targetLevel = await this.resolveTargetLevel(id);
+      return { fullName: u?.fullName || '', calls, targetLevel, metrics };
     } finally { db.close(); }
   }
 

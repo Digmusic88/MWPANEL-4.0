@@ -88,14 +88,16 @@ export class MocksController {
       const u = queryAll(db, `SELECT fullName FROM User WHERE id=?`, [id])[0];
       const rows = queryAll(db, `
         SELECT ec.id AS examCallId, ec.name AS examName, ec.date AS examDate,
+               ay.name AS academicYear,
                ep.name AS part, sr.partScore AS score, sr.submissionStatus AS status
         FROM StudentResult sr
         JOIN ExamCall ec ON ec.id=sr.examCallId
         JOIN ExamPart ep ON ep.id=sr.partId
+        LEFT JOIN AcademicYear ay ON ay.id=ec.academicYearId
         WHERE sr.studentId=? ORDER BY ec.date DESC, ep.name`, [id]);
       const byCall: any = {};
       for (const r of rows) {
-        byCall[r.examCallId] = byCall[r.examCallId] || { examName: r.examName, examDate: r.examDate, parts: [] };
+        byCall[r.examCallId] = byCall[r.examCallId] || { examName: r.examName, examDate: r.examDate, academicYear: r.academicYear || null, parts: [] };
         byCall[r.examCallId].parts.push({ part: r.part, score: r.score, status: r.status });
       }
       const calls = Object.values(byCall).map((c: any) => {
@@ -103,10 +105,19 @@ export class MocksController {
         const overall = scored.length ? Math.round((scored.reduce((a: number, p: any) => a + p.score, 0) / scored.length) * 10) / 10 : null;
         return { ...c, overall };
       });
-      const rawCalls: RawCall[] = calls as RawCall[];
-      const metrics = computeMockMetrics(rawCalls);
+      const metrics = computeMockMetrics(calls as RawCall[]);
+      // Organización por curso escolar (más reciente primero) para historiales con muchos cursos
+      const yearsMap = new Map<string, any[]>();
+      for (const c of calls as any[]) {
+        const y = c.academicYear || 'Sin curso';
+        if (!yearsMap.has(y)) yearsMap.set(y, []);
+        yearsMap.get(y)!.push(c);
+      }
+      const byYear = [...yearsMap.entries()]
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([year, yearCalls]) => ({ year, metrics: computeMockMetrics(yearCalls as RawCall[]) }));
       const targetLevel = await this.resolveTargetLevel(id);
-      return { fullName: u?.fullName || '', calls, targetLevel, metrics };
+      return { fullName: u?.fullName || '', calls, targetLevel, metrics, byYear };
     } finally { db.close(); }
   }
 

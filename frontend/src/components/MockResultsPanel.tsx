@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Statistic, Progress, Tag, Empty, Segmented } from 'antd';
+import { Card, Row, Col, Statistic, Progress, Tag, Empty, Segmented, Select } from 'antd';
 import {
   ArrowUpOutlined, ArrowDownOutlined, MinusOutlined,
 } from '@ant-design/icons';
@@ -47,10 +47,9 @@ type Props = {
     fullName?: string;
     targetLevel?: { code: string; label: string } | null;
     metrics: Metrics;
+    byYear?: { year: string; metrics: Metrics }[];
   } | null;
 };
-
-const fmt = (n: number | null) => (n == null ? '—' : n.toFixed(1));
 
 const TrendIcon = ({ t }: { t: string | null }) =>
   t === 'up' ? <ArrowUpOutlined style={{ color: '#16A34A' }} />
@@ -70,28 +69,59 @@ const sortSkills = (skills: Metrics['skills']) =>
     return ai - bi;
   });
 
+const ALL_YEARS = 'Todos los cursos';
+
 export default function MockResultsPanel({ data }: Props) {
   const [view, setView] = useState<string>('Global');
+  const byYear = data?.byYear || [];
+  const [year, setYear] = useState<string>(ALL_YEARS);
 
-  // FIX 3: reset skill toggle when student changes
-  useEffect(() => setView('Global'), [data]);
+  // Al cambiar de alumno: resetear destreza y elegir el curso más reciente por defecto
+  useEffect(() => {
+    setView('Global');
+    setYear(byYear.length ? byYear[0].year : ALL_YEARS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   if (!data || !data.metrics || data.metrics.calls.length === 0) {
     return <Empty description="Sin simulacros registrados" />;
   }
 
-  const { kpis, skills, evolution, skillSeries } = data.metrics;
+  // Métricas activas: del curso seleccionado, o globales ("Todos los cursos")
+  const activeMetrics: Metrics =
+    year === ALL_YEARS ? data.metrics : (byYear.find((y) => y.year === year)?.metrics || data.metrics);
+
+  const { kpis, skills, evolution, skillSeries } = activeMetrics;
   const sortedSkills = sortSkills(skills);
 
-  // Chart data based on current view selection
+  // Datos de la gráfica según la selección de destreza
   const chartData =
     view === 'Global'
       ? evolution.map((e) => ({ name: e.examName, valor: e.overall }))
       : (skillSeries[view] || []).map((p) => ({ name: p.examName, valor: p.value }));
 
+  const yearOptions = [
+    { value: ALL_YEARS, label: ALL_YEARS },
+    ...byYear.map((y) => ({ value: y.year, label: y.year })),
+  ];
+
   return (
     <div>
-      {/* KPI Header Cards */}
+      {/* Selector de curso escolar (sólo si hay varios cursos en el historial) */}
+      {byYear.length > 0 && (
+        <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, color: '#9B9BAB' }}>Curso escolar:</span>
+          <Select
+            size="small"
+            value={year}
+            onChange={(v) => { setYear(v); setView('Global'); }}
+            options={yearOptions}
+            style={{ minWidth: 190 }}
+          />
+        </div>
+      )}
+
+      {/* KPIs */}
       <Row gutter={[12, 12]}>
         <Col xs={12} md={8}>
           <Card size="small">
@@ -140,7 +170,7 @@ export default function MockResultsPanel({ data }: Props) {
         </Col>
       </Row>
 
-      {/* Per-skill progress bars */}
+      {/* Barras por destreza */}
       <Card size="small" title="Por destreza (último simulacro con dato)" style={{ marginTop: 12 }}>
         {sortedSkills.map((s) => (
           <div key={s.name} style={{ marginBottom: 10 }}>
@@ -162,10 +192,10 @@ export default function MockResultsPanel({ data }: Props) {
         ))}
       </Card>
 
-      {/* Historical evolution chart */}
+      {/* Evolución histórica */}
       <Card
         size="small"
-        title="Evolución histórica"
+        title={year === ALL_YEARS ? 'Evolución histórica (todos los cursos)' : `Evolución histórica · ${year}`}
         style={{ marginTop: 12 }}
         extra={
           <Segmented

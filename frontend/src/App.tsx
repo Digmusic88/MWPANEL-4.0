@@ -3538,7 +3538,7 @@ function SyncMocks() {
     try {
       const r = (await api.post('/mocks-sync/reconcile')).data;
       h();
-      message.success(`Sync ok: +${r.created ?? 0} grupos, ${r.enrolled ?? 0} altas, ${r.unenrolled ?? 0} bajas, ${r.incidencias?.length ?? 0} incidencias`);
+      message.success(`Sync ok: +${r.created ?? 0} alumnos, ${r.enrolled ?? 0} altas, ${r.unenrolled ?? 0} bajas, ${r.incidencias?.length ?? 0} incidencias`);
     } catch (e: any) {
       h();
       message.error(e?.response?.data?.message || 'Falló la sincronización');

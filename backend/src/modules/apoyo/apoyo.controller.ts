@@ -75,7 +75,7 @@ export class ApoyoController {
     if (chk.length === 0) return { ok: false, error: 'La matrícula o el grupo no son de Apoyo' };
     await this.ds.query(
       `INSERT INTO secretaria.apoyo_assignments(enrollment_id, group_id, weekday, slot_time, room, hours)
-       VALUES ($1,$2,$3,$4,$5,COALESCE($6,1))
+       VALUES ($1,$2,$3,$4,$5,COALESCE($6::numeric,1))
        ON CONFLICT (enrollment_id, group_id, weekday, slot_time) DO UPDATE SET hours=EXCLUDED.hours, room=COALESCE(EXCLUDED.room, secretaria.apoyo_assignments.room)`,
       [b.enrollmentId, b.groupId, b.weekday, b.slotTime, b.room || null, b.hours ?? null]);
     await this.ds.query(`UPDATE secretaria.enrollments SET group_id=$2 WHERE id=$1 AND group_id IS NULL`, [b.enrollmentId, b.groupId]);

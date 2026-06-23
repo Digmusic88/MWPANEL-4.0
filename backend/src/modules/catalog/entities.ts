@@ -31,6 +31,8 @@ export class Program {
   @Column({ name: 'bills_august', default: false }) billsAugust: boolean;
   // Mapa mes→factor de cobro: { "09":1, ..., "06":0.5, "07":0, "08":0 }
   @Column({ name: 'month_billing', type: 'jsonb', nullable: true }) monthBilling: Record<string, number>;
+  // Nivel Cambridge para sincronización con Mocks (null = no sincroniza)
+  @Column({ name: 'mock_exam_type', nullable: true }) mockExamType: string;
 }
 
 @Entity({ schema: 'secretaria', name: 'groups' })

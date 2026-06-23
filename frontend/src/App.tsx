@@ -7,6 +7,7 @@ import {
   DashboardOutlined, TeamOutlined, UserAddOutlined, EuroOutlined, LogoutOutlined,
   QuestionCircleOutlined, PlusOutlined, WarningOutlined, FilterOutlined, FormOutlined,
   AppstoreOutlined, HistoryOutlined, CalendarOutlined, MenuOutlined, SearchOutlined, LoginOutlined, SettingOutlined,
+  SyncOutlined,
 } from '@ant-design/icons';
 import { api, setToken, clearToken, getToken, beginImpersonation, endImpersonation, isImpersonating } from './api';
 import { InscripcionDrawer } from './components/InscripcionDrawer';
@@ -1753,6 +1754,16 @@ function Programas() {
           <Form.Item name="name" label="Nombre del programa" rules={[{ required: true }]}><Input placeholder="Ej.: PET (B1)" /></Form.Item>
           <Form.Item name="levelOrder" label="Orden (para ordenar la lista)"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="capacity" label="Aforo por defecto (opcional)"><InputNumber min={1} style={{ width: '100%' }} /></Form.Item>
+          <Form.Item name="mockExamType" label="Nivel Cambridge (sincroniza con Mocks)">
+            <Select allowClear placeholder="No sincroniza"
+              options={[
+                { value: 'A2_KEY', label: 'A2 Key' },
+                { value: 'B1_PET', label: 'B1 Preliminary (PET)' },
+                { value: 'B2_FIRST', label: 'B2 First (FCE)' },
+                { value: 'C1_CAE', label: 'C1 Advanced (CAE)' },
+                { value: 'C2_CPE', label: 'C2 Proficiency (CPE)' },
+              ]} />
+          </Form.Item>
           <Alert type="info" showIcon style={{ marginBottom: 12 }}
             message="¿Qué cobra este programa?"
             description="Marca matrícula/material si aplican, y define mes a mes cuánto se cobra: completo, medio mes, otra fracción o nada (p. ej. programas que no cobran septiembre, o junio a medio mes). Los importes base se ponen en Tarifas." />
@@ -3509,6 +3520,72 @@ function MockResultados() {
   );
 }
 
+// ----------------------------- SYNC MOCKS -----------------------------
+function SyncMocks() {
+  const [syncRows, setSyncRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const loadSync = async () => {
+    setLoading(true);
+    try { const r = await api.get('/mocks-sync/status'); setSyncRows(r.data.rows || []); }
+    catch { message.error('No se pudo cargar el historial de sync'); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { loadSync(); }, []);
+  const runSync = async () => {
+    setSyncing(true);
+    const h = message.loading('Sincronizando con Mocks…', 0);
+    try {
+      const r = (await api.post('/mocks-sync/reconcile')).data;
+      h();
+      message.success(`Sync ok: +${r.created ?? 0} grupos, ${r.enrolled ?? 0} altas, ${r.unenrolled ?? 0} bajas, ${r.incidencias?.length ?? 0} incidencias`);
+    } catch (e: any) {
+      h();
+      message.error(e?.response?.data?.message || 'Falló la sincronización');
+    } finally {
+      setSyncing(false);
+      loadSync();
+    }
+  };
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <Title level={3} style={{ margin: 0 }}>Sync Mocks</Title>
+        <Button type="primary" icon={<SyncOutlined />} loading={syncing} onClick={runSync}>Resincronizar ahora</Button>
+      </div>
+      <Ayuda title="Sincronización de grupos Cambridge con Cambridge Mocks">
+        Secretaría sincroniza automáticamente los grupos de nivel Cambridge (A2/B1/B2/C1/C2) con la plataforma de exámenes Mocks.
+        Puedes <b>forzar una resincronización manual</b> con el botón. La columna "Nivel Cambridge" de cada programa determina qué grupos se sincronizan.
+      </Ayuda>
+      <Card>
+        <Table rowKey="id" dataSource={syncRows} loading={loading} pagination={{ pageSize: 20 }} size="small"
+          columns={[
+            { title: 'Fecha', dataIndex: 'ran_at', render: (d) => fmtDate(d), width: 110 },
+            { title: 'Disparador', dataIndex: 'trigger', width: 110 },
+            { title: 'OK', dataIndex: 'ok', width: 60, render: (ok) => ok ? <Tag color="green">OK</Tag> : <Tag color="red">Error</Tag> },
+            { title: 'Altas', dataIndex: 'enrolled', width: 70 },
+            { title: 'Bajas', dataIndex: 'unenrolled', width: 70 },
+            { title: 'Renombrados', dataIndex: 'renamed', width: 110 },
+            { title: 'Nuevos', dataIndex: 'created', width: 80 },
+            {
+              title: 'Incidencias', width: 110,
+              render: (_, r) => {
+                const inc: string[] = r.incidencias || [];
+                if (inc.length === 0) return <Tag color="default">0</Tag>;
+                return (
+                  <Tooltip title={<ul style={{ margin: 0, paddingLeft: 16 }}>{inc.map((s, i) => <li key={i}>{s}</li>)}</ul>}>
+                    <Tag color="orange">{inc.length}</Tag>
+                  </Tooltip>
+                );
+              },
+            },
+            { title: 'Error', dataIndex: 'error', render: (e) => e ? <Tooltip title={e}><Tag color="red">Ver</Tag></Tooltip> : '—' },
+          ]} />
+      </Card>
+    </div>
+  );
+}
+
 // ----------------------------- ASISTENCIA -----------------------------
 const ATT_STATUS: any = {
   presente: { color: 'green', label: 'Presente' },
@@ -5153,6 +5230,7 @@ export default function App() {
     danza: { icon: <AppstoreOutlined />, label: 'Danza' },
     examenes: { icon: <FormOutlined />, label: 'Simulacros' },
     mock: { icon: <DashboardOutlined />, label: 'Resultados Mock' },
+    syncmocks: { icon: <SyncOutlined />, label: 'Sync Mocks' },
     reuniones: { icon: <FormOutlined />, label: 'Reuniones' },
     chat: { icon: <TeamOutlined />, label: 'Grupos de chat' },
     config: { icon: <SettingOutlined />, label: 'Configuración' },
@@ -5161,7 +5239,7 @@ export default function App() {
     { key: 'g_resumen', icon: <DashboardOutlined />, label: 'Resumen', children: ['dashboard', 'organizacion', 'apoyo', 'danza', 'eventos'] },
     { key: 'g_alumnado', icon: <TeamOutlined />, label: 'Alumnado', children: ['alumnos', 'matriculas', 'familias', 'bajas', 'nivel', 'documentacion'] },
     { key: 'g_economico', icon: <EuroOutlined />, label: 'Económico', children: ['pagos', 'morosidad', 'remesas', 'rifas', 'taper', 'informes'] },
-    { key: 'g_docencia', icon: <FormOutlined />, label: 'Docencia', children: ['asistencia', 'tareas', 'cuaderno', 'horarios', 'examenes', 'mock', 'reuniones', 'chat'] },
+    { key: 'g_docencia', icon: <FormOutlined />, label: 'Docencia', children: ['asistencia', 'tareas', 'cuaderno', 'horarios', 'examenes', 'mock', 'syncmocks', 'reuniones', 'chat'] },
   ];
   const ALL_KEYS = [...GROUPS.flatMap(g => g.children), 'config'];
   // ¿Es solo profesor (sin rol de gestión)? → menú docente reducido
@@ -5243,6 +5321,7 @@ export default function App() {
           {safeView === 'tareas' && <Tareas />}
           {safeView === 'examenes' && <Examenes user={user} />}
           {safeView === 'mock' && <MockResultados />}
+          {safeView === 'syncmocks' && <SyncMocks />}
           {safeView === 'chat' && <Chat me={user} />}
           {safeView === 'horarios' && <Horarios user={user} />}
           {safeView === 'nivel' && <PruebasNivel />}

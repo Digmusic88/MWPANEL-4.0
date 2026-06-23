@@ -197,10 +197,19 @@ export class CatalogController {
   }
 
   @Post('programs') @Roles('secretaria_admin','secretaria_staff')
-  createProgram(@Body() b: Partial<Program>) { return this.programs.save(this.programs.create(b)); }
+  createProgram(@Body() b: Partial<Program> & { mockExamType?: string | null }) {
+    const data: Partial<Program> = { ...b };
+    if ('mockExamType' in b) data.mockExamType = b.mockExamType || null;
+    return this.programs.save(this.programs.create(data));
+  }
 
   @Patch('programs/:id') @Roles('secretaria_admin','secretaria_staff')
-  async updateProgram(@Param('id') id: string, @Body() b: Partial<Program>) { await this.programs.update(id, b); return this.programs.findOne({ where: { id } }); }
+  async updateProgram(@Param('id') id: string, @Body() b: Partial<Program> & { mockExamType?: string | null }) {
+    const data: Partial<Program> = { ...b };
+    if ('mockExamType' in b) data.mockExamType = b.mockExamType || null;
+    await this.programs.update(id, data);
+    return this.programs.findOne({ where: { id } });
+  }
 
   @Delete('programs/:id') @Roles('secretaria_admin')
   async deleteProgram(@Param('id') id: string) { await this.programs.delete(id); return { ok: true }; }

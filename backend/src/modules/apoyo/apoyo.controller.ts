@@ -1,21 +1,9 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
-import { IsString, IsUUID, IsInt, IsOptional, IsNumber, IsIn, IsBoolean, Min, Max } from 'class-validator';
+import { IsUUID, IsOptional, IsNumber, IsIn, IsBoolean, Min } from 'class-validator';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { SecretariaAuthGuard, Roles } from '../../common/secretaria-auth.guard';
 
-class AssignDto {
-  @IsUUID() enrollmentId: string;
-  @IsInt() @Min(1) @Max(7) weekday: number;
-  @IsString() slotTime: string; // HH:MM
-  @IsOptional() @IsString() room?: string;
-  @IsOptional() @IsNumber() hours?: number;
-}
-class MoveDto {
-  @IsInt() @Min(1) @Max(7) weekday: number;
-  @IsString() slotTime: string;
-  @IsOptional() @IsString() room?: string;
-}
 class FeeTierDto {
   @IsUUID() academicYearId: string;
   @IsIn(['primaria','secundaria','bachillerato']) etapa: string;
@@ -40,87 +28,57 @@ export class ApoyoController {
     return { yid, sid };
   }
 
-  // Tablero de Apoyo: asignaciones (día×hora×sala), pool sin asignar y lista de espera.
+  // Tablero kanban de Apoyo: grupos con nombre + alumnos (estilo Danza; con horas y nivel)
   @Get('board') @Roles('secretaria_admin','secretaria_staff','direccion')
   async board(@Query('academicYearId') yearId?: string) {
     const { yid, sid } = await this.ctx(yearId);
+    const groups = await this.ds.query(`
+      SELECT g.id, g.name, g.room, g.color,
+        COALESCE((SELECT json_agg(json_build_object('weekday', ss.weekday, 'startTime', to_char(ss.start_time,'HH24:MI'), 'room', ss.room) ORDER BY ss.weekday, ss.start_time)
+                  FROM secretaria.schedule_slots ss WHERE ss.group_id=g.id), '[]'::json) AS schedule
+      FROM secretaria.groups g JOIN secretaria.programs p ON p.id=g.program_id
+      WHERE g.academic_year_id=$1 AND p.service_id=$2 ORDER BY g.sort_order, g.name`, [yid, sid]);
+    const studentsRaw = await this.ds.query(`
+      SELECT e.id AS "enrollmentId", e.status, e.notes AS comment, e.apoyo_level AS "apoyoLevel",
+        COALESCE(NULLIF(TRIM(COALESCE(st.first_name,'')||' '||COALESCE(st.last_name,'')),''), va.first_name||' '||va.last_name) AS "studentName",
+        secretaria.fn_resolve_monthly_fee(e.id) AS monthly,
+        COALESCE((SELECT json_agg(json_build_object('id', a.id, 'groupId', a.group_id, 'weekday', a.weekday, 'startTime', a.slot_time, 'hours', a.hours) ORDER BY a.weekday, a.slot_time)
+                  FROM secretaria.apoyo_assignments a WHERE a.enrollment_id=e.id), '[]'::json) AS assignments
+      FROM secretaria.enrollments e
+      JOIN secretaria.students st ON st.id=e.student_id
+      LEFT JOIN secretaria.v_alumnos_escuela va ON va.mwpanel_student_id=st.mwpanel_student_id
+      WHERE e.academic_year_id=$1 AND e.service_id=$2 AND e.status IN ('matriculado','preinscrito','lista_espera','pendiente')
+      ORDER BY "studentName"`, [yid, sid]);
+    const students = studentsRaw.map((s: any) => ({ ...s, totalHours: (s.assignments || []).reduce((sum: number, a: any) => sum + Number(a.hours || 0), 0) }));
+    return { groups, students };
+  }
+
+  // Detalle de Apoyo de un alumno (para la ficha)
+  @Get('student/:enrollmentId') @Roles('secretaria_admin','secretaria_staff','direccion')
+  async studentDetail(@Param('enrollmentId') enrollmentId: string) {
     const assignments = await this.ds.query(`
-      SELECT a.id, a.enrollment_id AS "enrollmentId", a.weekday, a.slot_time AS "slotTime", a.room,
-             a.hours, e.apoyo_level AS "apoyoLevel",
-             (SELECT COALESCE(SUM(h.hours),0) FROM secretaria.apoyo_assignments h WHERE h.enrollment_id=e.id) AS "totalHours",
-             secretaria.fn_resolve_monthly_fee(e.id) AS "monthlyFee",
-             COALESCE(NULLIF(TRIM(COALESCE(st.first_name,'')||' '||COALESCE(st.last_name,'')),''), va.first_name||' '||va.last_name) AS "studentName"
-      FROM secretaria.apoyo_assignments a
-      JOIN secretaria.enrollments e ON e.id=a.enrollment_id
-      JOIN secretaria.students st ON st.id=e.student_id
-      LEFT JOIN secretaria.v_alumnos_escuela va ON va.mwpanel_student_id=st.mwpanel_student_id
-      WHERE e.academic_year_id=$1 AND e.service_id=$2
-      ORDER BY a.weekday, a.slot_time, "studentName"`, [yid, sid]);
-    // Pool: matriculados de apoyo SIN ninguna asignación
-    const pool = await this.ds.query(`
-      SELECT e.id AS "enrollmentId", e.apoyo_level AS "apoyoLevel",
-             secretaria.fn_resolve_monthly_fee(e.id) AS "monthlyFee",
-             COALESCE(NULLIF(TRIM(COALESCE(st.first_name,'')||' '||COALESCE(st.last_name,'')),''), va.first_name||' '||va.last_name) AS "studentName"
-      FROM secretaria.enrollments e
-      JOIN secretaria.students st ON st.id=e.student_id
-      LEFT JOIN secretaria.v_alumnos_escuela va ON va.mwpanel_student_id=st.mwpanel_student_id
-      WHERE e.academic_year_id=$1 AND e.service_id=$2 AND e.status='matriculado'
-        AND NOT EXISTS (SELECT 1 FROM secretaria.apoyo_assignments a WHERE a.enrollment_id=e.id)
-      ORDER BY "studentName"`, [yid, sid]);
-    // Lista de espera: matrículas de apoyo en estado lista_espera
-    const waitlist = await this.ds.query(`
-      SELECT e.id AS "enrollmentId", e.waitlist_reason AS "reason",
-             COALESCE(NULLIF(TRIM(COALESCE(st.first_name,'')||' '||COALESCE(st.last_name,'')),''), va.first_name||' '||va.last_name) AS "studentName"
-      FROM secretaria.enrollments e
-      JOIN secretaria.students st ON st.id=e.student_id
-      LEFT JOIN secretaria.v_alumnos_escuela va ON va.mwpanel_student_id=st.mwpanel_student_id
-      WHERE e.academic_year_id=$1 AND e.service_id=$2 AND e.status='lista_espera'
-      ORDER BY "studentName"`, [yid, sid]);
-    // Franjas horarias persistentes (+ las que tengan asignaciones aunque no estén en la lista)
-    const slotRows = await this.ds.query(`
-      SELECT slot_time AS "slotTime" FROM secretaria.apoyo_slots
-      UNION SELECT DISTINCT a.slot_time FROM secretaria.apoyo_assignments a
-      ORDER BY 1`);
-    const slots = slotRows.map((r: any) => r.slotTime);
-    return { assignments, pool, waitlist, slots };
+      SELECT a.id, a.group_id AS "groupId", g.name AS "groupName", a.weekday, a.slot_time AS "slotTime", a.hours
+      FROM secretaria.apoyo_assignments a JOIN secretaria.groups g ON g.id=a.group_id
+      WHERE a.enrollment_id=$1 ORDER BY a.weekday, a.slot_time`, [enrollmentId]);
+    const meta = await this.ds.query(`SELECT apoyo_level AS "apoyoLevel", secretaria.fn_resolve_monthly_fee(id) AS monthly FROM secretaria.enrollments WHERE id=$1`, [enrollmentId]);
+    const totalHours = assignments.reduce((sum: number, a: any) => sum + Number(a.hours || 0), 0);
+    return { apoyoLevel: meta[0]?.apoyoLevel || null, monthly: meta[0]?.monthly ?? null, totalHours, assignments };
   }
 
-  // Franjas horarias (filas de la rejilla)
-  @Post('slots') @Roles('secretaria_admin','secretaria_staff')
-  async addSlot(@Body() b: { slotTime: string }) {
-    if (!/^\d{1,2}:\d{2}$/.test(b.slotTime || '')) return { ok: false, error: 'Formato HH:MM' };
-    await this.ds.query(`INSERT INTO secretaria.apoyo_slots(slot_time) VALUES ($1) ON CONFLICT (slot_time) DO NOTHING`, [b.slotTime]);
-    return { ok: true };
-  }
-
-  // Elimina una franja horaria. Si tenía alumnos asignados, también los quita de ella.
-  @Delete('slots/:slotTime') @Roles('secretaria_admin','secretaria_staff')
-  async deleteSlot(@Param('slotTime') slotTime: string) {
-    const removed = await this.ds.query(`DELETE FROM secretaria.apoyo_assignments WHERE slot_time=$1 RETURNING id`, [slotTime]);
-    await this.ds.query(`DELETE FROM secretaria.apoyo_slots WHERE slot_time=$1`, [slotTime]);
-    const n = Array.isArray(removed) ? (Array.isArray(removed[0]) ? removed[0].length : removed.length) : 0;
-    return { ok: true, assignmentsRemoved: n };
-  }
-
+  // Asignar (o actualizar horas de) un alumno a una franja de un grupo
   @Post('assign') @Roles('secretaria_admin','secretaria_staff')
-  async assign(@Body() b: AssignDto) {
-    const r = await this.ds.query(
-      `INSERT INTO secretaria.apoyo_assignments(enrollment_id, weekday, slot_time, room, hours)
-       VALUES ($1,$2,$3,$4,COALESCE($5,1)) RETURNING id`,
-      [b.enrollmentId, b.weekday, b.slotTime, b.room || null, b.hours ?? null]);
-    return { ok: true, id: r[0].id };
-  }
-
-  @Patch('assignment/:id') @Roles('secretaria_admin','secretaria_staff')
-  async move(@Param('id') id: string, @Body() b: MoveDto) {
-    await this.ds.query(`UPDATE secretaria.apoyo_assignments SET weekday=$2, slot_time=$3, room=COALESCE($4, room) WHERE id=$1`,
-      [id, b.weekday, b.slotTime, b.room ?? null]);
-    return { ok: true };
-  }
-
-  @Patch('assignment/:id/room') @Roles('secretaria_admin','secretaria_staff')
-  async setRoom(@Param('id') id: string, @Body() b: { room?: string }) {
-    await this.ds.query(`UPDATE secretaria.apoyo_assignments SET room=$2 WHERE id=$1`, [id, b.room || null]);
+  async assign(@Body() b: { enrollmentId: string; groupId: string; weekday: number; slotTime: string; hours?: number; room?: string }) {
+    const chk = await this.ds.query(`
+      SELECT 1 FROM secretaria.enrollments e JOIN secretaria.services se ON se.id=e.service_id
+      JOIN secretaria.groups g ON g.id=$2 JOIN secretaria.programs p ON p.id=g.program_id JOIN secretaria.services sg ON sg.id=p.service_id
+      WHERE e.id=$1 AND se.code='APOYO' AND sg.code='APOYO'`, [b.enrollmentId, b.groupId]);
+    if (chk.length === 0) return { ok: false, error: 'La matrícula o el grupo no son de Apoyo' };
+    await this.ds.query(
+      `INSERT INTO secretaria.apoyo_assignments(enrollment_id, group_id, weekday, slot_time, room, hours)
+       VALUES ($1,$2,$3,$4,$5,COALESCE($6,1))
+       ON CONFLICT (enrollment_id, group_id, weekday, slot_time) DO UPDATE SET hours=EXCLUDED.hours, room=EXCLUDED.room`,
+      [b.enrollmentId, b.groupId, b.weekday, b.slotTime, b.room || null, b.hours ?? null]);
+    await this.ds.query(`UPDATE secretaria.enrollments SET group_id=$2 WHERE id=$1 AND group_id IS NULL`, [b.enrollmentId, b.groupId]);
     return { ok: true };
   }
 
@@ -134,10 +92,24 @@ export class ApoyoController {
 
   @Delete('assignment/:id') @Roles('secretaria_admin','secretaria_staff')
   async remove(@Param('id') id: string) {
-    await this.ds.query(`DELETE FROM secretaria.apoyo_assignments WHERE id=$1`, [id]);
+    const rows = await this.ds.query(`DELETE FROM secretaria.apoyo_assignments WHERE id=$1 RETURNING enrollment_id`, [id]);
+    const enr = rows[0]?.enrollment_id;
+    if (enr) {
+      const rest = await this.ds.query(`SELECT group_id FROM secretaria.apoyo_assignments WHERE enrollment_id=$1 LIMIT 1`, [enr]);
+      await this.ds.query(`UPDATE secretaria.enrollments SET group_id=$2 WHERE id=$1`, [enr, rest[0]?.group_id || null]);
+    }
     return { ok: true };
   }
 
+  @Delete('assignments') @Roles('secretaria_admin','secretaria_staff')
+  async delGroupAssignments(@Query('enrollmentId') enrollmentId: string, @Query('groupId') groupId: string) {
+    await this.ds.query(`DELETE FROM secretaria.apoyo_assignments WHERE enrollment_id=$1 AND group_id=$2`, [enrollmentId, groupId]);
+    const rest = await this.ds.query(`SELECT group_id FROM secretaria.apoyo_assignments WHERE enrollment_id=$1 LIMIT 1`, [enrollmentId]);
+    await this.ds.query(`UPDATE secretaria.enrollments SET group_id=$2 WHERE id=$1`, [enrollmentId, rest[0]?.group_id || null]);
+    return { ok: true };
+  }
+
+  // --- Tarifas por etapa + horas (se mantienen) ---
   @Get('fee-tiers') @Roles('secretaria_admin','secretaria_staff','direccion')
   async listTiers(@Query('academicYearId') yearId?: string) {
     const { yid } = await this.ctx(yearId);

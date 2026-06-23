@@ -111,10 +111,17 @@ export class StudentsController {
       WHERE s.is_active = true
         AND ($1::text IS NULL OR
              (COALESCE(s.first_name,'')||' '||COALESCE(s.last_name,'')) ILIKE '%'||$1||'%')
-        -- Excluir alumnos cuyas matrículas están TODAS en baja (aparecen en la sección Bajas)
+        -- Excluir alumnos cuyas matrículas DEL CURSO ACTIVO están TODAS en baja (aparecen en "Bajas").
+        -- IMPORTANTE: se evalúa SOLO el curso activo. Una matrícula no-baja de cursos anteriores
+        -- (p. ej. 'matriculado' el curso pasado) NO debe mantener al alumno en el listado de activos
+        -- si este curso está de baja en todos sus servicios; si no, quedaría en un limbo (ni activo ni baja).
         AND (
-          NOT EXISTS (SELECT 1 FROM secretaria.enrollments b WHERE b.student_id=s.id AND b.status='baja')
-          OR EXISTS (SELECT 1 FROM secretaria.enrollments a WHERE a.student_id=s.id AND a.status<>'baja')
+          NOT EXISTS (SELECT 1 FROM secretaria.enrollments b
+                      JOIN secretaria.academic_years ayb ON ayb.id=b.academic_year_id AND ayb.is_active
+                      WHERE b.student_id=s.id AND b.status='baja')
+          OR EXISTS (SELECT 1 FROM secretaria.enrollments a
+                     JOIN secretaria.academic_years aya ON aya.id=a.academic_year_id AND aya.is_active
+                     WHERE a.student_id=s.id AND a.status<>'baja')
         )
       GROUP BY s.id
       HAVING ($2::boolean IS NOT TRUE OR
@@ -564,8 +571,14 @@ export class StudentsController {
       LEFT JOIN secretaria.services sv ON sv.id=e.service_id
       WHERE s.is_active=false
          OR (
-           EXISTS (SELECT 1 FROM secretaria.enrollments b WHERE b.student_id=s.id AND b.status='baja')
-           AND NOT EXISTS (SELECT 1 FROM secretaria.enrollments a WHERE a.student_id=s.id AND a.status<>'baja')
+           -- Todas las matrículas DEL CURSO ACTIVO están en baja (se ignoran cursos anteriores,
+           -- simétrico con la exclusión del listado de Alumnos)
+           EXISTS (SELECT 1 FROM secretaria.enrollments b
+                   JOIN secretaria.academic_years ayb ON ayb.id=b.academic_year_id AND ayb.is_active
+                   WHERE b.student_id=s.id AND b.status='baja')
+           AND NOT EXISTS (SELECT 1 FROM secretaria.enrollments a
+                           JOIN secretaria.academic_years aya ON aya.id=a.academic_year_id AND aya.is_active
+                           WHERE a.student_id=s.id AND a.status<>'baja')
          )
       GROUP BY s.id
       ORDER BY s.deactivated_at DESC NULLS LAST, s.last_name`);

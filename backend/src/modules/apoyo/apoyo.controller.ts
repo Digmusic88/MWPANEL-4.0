@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
-import { IsString, IsUUID, IsInt, IsOptional, IsNumber, IsIn, Min, Max } from 'class-validator';
+import { IsString, IsUUID, IsInt, IsOptional, IsNumber, IsIn, IsBoolean, Min, Max } from 'class-validator';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { SecretariaAuthGuard, Roles } from '../../common/secretaria-auth.guard';
@@ -21,7 +21,12 @@ class FeeTierDto {
   @IsIn(['primaria','secundaria','bachillerato']) etapa: string;
   @IsIn(['mensualidad','matricula','material']) concept: string;
   @IsOptional() @IsNumber() hours?: number | null;
-  @IsNumber() amount: number;
+  @IsNumber() @Min(0) amount: number;
+}
+class UpdateFeeTierDto {
+  @IsOptional() @IsNumber() @Min(0) amount?: number;
+  @IsOptional() @IsNumber() hours?: number | null;
+  @IsOptional() @IsBoolean() isActive?: boolean;
 }
 
 @Controller('secretaria/apoyo')
@@ -160,7 +165,7 @@ export class ApoyoController {
   }
 
   @Patch('fee-tiers/:id') @Roles('secretaria_admin','secretaria_staff')
-  async updateTier(@Param('id') id: string, @Body() b: { amount?: number; hours?: number | null; isActive?: boolean }) {
+  async updateTier(@Param('id') id: string, @Body() b: UpdateFeeTierDto) {
     const sets: string[] = []; const params: any[] = [];
     const push = (c: string, v: any) => { params.push(v); sets.push(`${c} = $${params.length}`); };
     if (b.amount !== undefined) push('amount', b.amount);

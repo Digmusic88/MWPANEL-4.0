@@ -4535,181 +4535,177 @@ function Organizacion() {
   );
 }
 
-// ----------------------------- APOYO (franjas + lista de espera) -----------------------------
-const APOYO_DEFAULT_TIMES = ['16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00'];
-const APOYO_DAYS = [1, 2, 3, 4, 5];
-function ApoyoBoard() {
-  const q = useSearch();
-  const [data, setData] = useState<any>({ assignments: [], pool: [], waitlist: [], slots: [] });
-  const [newTime, setNewTime] = useState('');
-  const [drag, setDrag] = useState<any>(null);
-  const [overKey, setOverKey] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const load = async () => { setLoading(true); try { const { data } = await api.get('/apoyo/board'); setData(data); } finally { setLoading(false); } };
-  useLiveQuery(['apoyo', 'enrollments'], load);
-  useEffect(() => { load(); }, []);
-
-  const LEVELS = [
-    { value: 'primaria', label: 'Primaria' },
-    { value: 'secundaria', label: 'Secundaria' },
-    { value: 'bachillerato', label: 'Bachillerato' },
-  ];
-  const eur = (n: any) => (n == null ? <Tag color="red">revisar</Tag> : <Tag color="green">{Number(n).toFixed(2)} €</Tag>);
-  const setLevel = async (enrollmentId: string, apoyoLevel: string) => {
-    try { await api.patch(`/enrollments/${enrollmentId}`, { apoyoLevel }); load(); } catch { message.error('Error'); }
-  };
-  const setAssignHours = async (assignmentId: string) => {
-    const v = window.prompt('Horas de esta franja (p. ej. 1 o 0.5)');
-    if (v === null) return;
-    const hours = Number(v.replace(',', '.'));
-    if (!Number.isFinite(hours) || hours <= 0) { message.warning('Número de horas inválido'); return; }
-    try { await api.patch(`/apoyo/assignment/${assignmentId}/hours`, { hours }); load(); } catch { message.error('Error'); }
-  };
-
-  const times: string[] = (data.slots && data.slots.length) ? data.slots : APOYO_DEFAULT_TIMES;
-  const addSlot = async () => {
-    if (!/^\d{1,2}:\d{2}$/.test(newTime)) { message.warning('Formato HH:MM'); return; }
-    try { await api.post('/apoyo/slots', { slotTime: newTime }); setNewTime(''); load(); } catch { message.error('Error'); }
-  };
-  const deleteSlot = async (t: string) => {
-    try { const { data } = await api.delete(`/apoyo/slots/${encodeURIComponent(t)}`); message.success(data.assignmentsRemoved ? `Franja eliminada (${data.assignmentsRemoved} alumno/s quitado/s)` : 'Franja eliminada'); load(); }
-    catch { message.error('No se pudo eliminar'); }
-  };
-  const cell = (day: number, t: string) => data.assignments.filter((a: any) => a.weekday === day && a.slotTime === t && matchesText(a, q));
-  const pool = data.pool.filter((s: any) => matchesText(s, q));
-  const waitlist = data.waitlist.filter((s: any) => matchesText(s, q));
-
-  const dropOnCell = async (day: number, t: string) => {
-    const d = drag; setDrag(null); setOverKey(null);
-    if (!d) return;
+// ----------------------------- APOYO (kanban de grupos, estilo Danza) -----------------------------
+function ApoyoSlotsModal({ group, student, originGroupId, open, onClose, onDone }:
+  { group: any; student: any; originGroupId: string | null; open: boolean; onClose: () => void; onDone: () => void }) {
+  const DOW = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  const key = (s: any) => `${s.weekday}|${s.startTime}`;
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [hours, setHours] = useState<Record<string, number>>({});
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (!open || !group || !student) return;
+    const cur = (student.assignments || []).filter((a: any) => a.groupId === group.id);
+    setChecked(new Set(cur.map((a: any) => key(a))));
+    const h: Record<string, number> = {};
+    for (const a of cur) h[key(a)] = Number(a.hours) || 1;
+    setHours(h);
+  }, [open, group?.id, student?.enrollmentId]);
+  const toggle = (k: string) => setChecked(c => { const n = new Set(c); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const confirm = async () => {
+    setSaving(true);
+    const cur = (student.assignments || []).filter((a: any) => a.groupId === group.id);
     try {
-      if (d.assignmentId) {
-        await api.patch(`/apoyo/assignment/${d.assignmentId}`, { weekday: day, slotTime: t });
-      } else {
-        if (d.fromWaitlist) await api.patch(`/enrollments/${d.enrollmentId}`, { status: 'matriculado' });
-        await api.post('/apoyo/assign', { enrollmentId: d.enrollmentId, weekday: day, slotTime: t });
+      for (const slot of (group.schedule || [])) {
+        const k = key(slot);
+        if (checked.has(k)) {
+          const r = await api.post('/apoyo/assign', { enrollmentId: student.enrollmentId, groupId: group.id, weekday: slot.weekday, slotTime: slot.startTime, hours: hours[k] || 1, room: slot.room || group.room });
+          if (r.data?.ok === false) message.warning(r.data.error);
+        }
       }
-      load();
-    } catch { message.error('No se pudo asignar'); }
+      for (const a of cur) if (!checked.has(key(a))) await api.delete(`/apoyo/assignment/${a.id}`);
+      if (originGroupId && originGroupId !== group.id) {
+        await api.delete('/apoyo/assignments', { params: { enrollmentId: student.enrollmentId, groupId: originGroupId } });
+      }
+      message.success('Franjas actualizadas'); onDone();
+    } catch { message.error('Error al actualizar las franjas'); }
+    finally { setSaving(false); }
   };
-  const dropOnPool = async () => {
-    const d = drag; setDrag(null); setOverKey(null);
-    if (!d) return;
-    try {
-      if (d.assignmentId) await api.delete(`/apoyo/assignment/${d.assignmentId}`);
-      else if (d.fromWaitlist) await api.patch(`/enrollments/${d.enrollmentId}`, { status: 'matriculado' });
-      load();
-    } catch { message.error('Error'); }
-  };
-  const setRoom = async (a: any) => {
-    const room = window.prompt('Sala para ' + a.studentName, a.room || '');
-    if (room === null) return;
-    try { await api.patch(`/apoyo/assignment/${a.id}/room`, { room }); load(); } catch { message.error('Error'); }
-  };
-  const toWaitlist = async (enrollmentId: string) => { try { await api.patch(`/enrollments/${enrollmentId}`, { status: 'lista_espera' }); load(); } catch { message.error('Error'); } };
-
-  const card = (label: string, dragData: any, opts: { room?: string; onRoom?: () => void; menu?: any } = {}) => (
-    <div draggable onDragStart={() => setDrag(dragData)} onDragEnd={() => { setDrag(null); setOverKey(null); }}
-      style={{ background: '#F5F2ED', border: '1px solid #E2DDD8', borderRadius: 6, padding: '4px 6px', fontSize: 12, marginBottom: 4, cursor: 'grab', display: 'flex', justifyContent: 'space-between', gap: 4, alignItems: 'center' }}>
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}{opts.room ? <Tag style={{ marginLeft: 4 }}>{opts.room}</Tag> : null}</span>
-      {opts.menu && <Dropdown menu={opts.menu} trigger={['click']}><a style={{ color: '#9B9BAB', flexShrink: 0 }} onClick={e => e.preventDefault()}>⋯</a></Dropdown>}
-    </div>
+  return (
+    <Modal title={`Franjas de ${student?.studentName || ''} en ${group?.name || ''}`} open={open} onCancel={onClose}
+      onOk={confirm} okText="Guardar" cancelText="Cancelar" confirmLoading={saving}>
+      {(group?.schedule || []).length === 0 && <Text type="secondary">Este grupo no tiene franjas. Defínelas en Horarios.</Text>}
+      {(group?.schedule || []).map((slot: any) => {
+        const k = key(slot);
+        return (
+          <div key={k} style={{ padding: '4px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Checkbox checked={checked.has(k)} onChange={() => toggle(k)}>
+              {DOW[slot.weekday]} {slot.startTime}{slot.room ? ` · ${slot.room}` : ''}
+            </Checkbox>
+            {checked.has(k) && (
+              <InputNumber size="small" min={0.5} step={0.5} style={{ width: 90 }} value={hours[k] ?? 1}
+                onChange={(v) => setHours(h => ({ ...h, [k]: Number(v) || 1 }))} addonAfter="h" />
+            )}
+          </div>
+        );
+      })}
+      {originGroupId && originGroupId !== group?.id && <Text type="secondary" style={{ fontSize: 12 }}>Se moverá: se quitarán sus franjas del grupo de origen.</Text>}
+    </Modal>
   );
+}
+function ApoyoBoard() {
+  const DOW = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  const LEVELS = [{ value: 'primaria', label: 'Primaria' }, { value: 'secundaria', label: 'Secundaria' }, { value: 'bachillerato', label: 'Bachillerato' }];
+  const [years, setYears] = useState<any[]>([]);
+  const [data, setData] = useState<any>({ groups: [], students: [] });
+  const [drag, setDrag] = useState<{ enrollmentId: string; fromGroupId: string | null } | null>(null);
+  const [slotsModal, setSlotsModal] = useState<{ group: any; student: any; originGroupId: string | null } | null>(null);
+  const [overCol, setOverCol] = useState<string | null>(null);
+  const activeYear = () => years.find(y => y.isActive);
+  const load = async () => {
+    const y = activeYear(); if (!y) return;
+    try { const { data } = await api.get('/apoyo/board', { params: { academicYearId: y.id } }); setData(data); } catch {}
+  };
+  useEffect(() => { api.get('/catalog/years').then(r => setYears(r.data)); }, []);
+  useEffect(() => { if (years.length) load(); }, [years]);
+  useLiveQuery(['enrollments', 'groups', 'apoyo'], load);
 
+  const setStatus = async (enrollmentId: string, status: string) => { try { await api.patch(`/enrollments/${enrollmentId}`, { status }); load(); } catch { message.error('Error'); } };
+  const setComment = async (s: any) => { const c = window.prompt('Comentario sobre ' + s.studentName + ':', s.comment || ''); if (c === null) return; try { await api.patch(`/enrollments/${s.enrollmentId}`, { notes: c }); load(); } catch { message.error('Error'); } };
+  const setLevel = async (enrollmentId: string, apoyoLevel: string) => { try { await api.patch(`/enrollments/${enrollmentId}`, { apoyoLevel }); load(); } catch { message.error('Error'); } };
+  const quitarGrupo = async (enrollmentId: string, groupId: string) => { try { await api.delete('/apoyo/assignments', { params: { enrollmentId, groupId } }); load(); } catch { message.error('Error'); } };
+  const openSlots = (group: any, student: any, originGroupId: string | null) => setSlotsModal({ group, student, originGroupId });
+
+  const bolsa = (data.students || []).filter((s: any) => (s.assignments || []).length === 0);
+  const inGroup = (g: any) => (data.students || []).filter((s: any) => (s.assignments || []).some((a: any) => a.groupId === g.id));
+  const slotsOf = (s: any, g: any) => (s.assignments || []).filter((a: any) => a.groupId === g.id).map((a: any) => `${DOW[a.weekday]} ${a.startTime} (${Number(a.hours)}h)`).join(', ');
+
+  const card = (s: any, g: any | null) => {
+    const st = orgStat(s.status);
+    const menu = {
+      items: [
+        { key: 'comment', label: s.comment ? 'Editar comentario' : 'Añadir comentario' },
+        ...(g ? [{ key: 'slots', label: 'Editar franjas' }, { key: 'quit', label: 'Quitar del grupo' }] : []),
+        { type: 'divider' as const },
+        { key: 'st_matriculado', label: '✓ Matricular' },
+        { key: 'st_preinscrito', label: 'Marcar preinscrito' },
+        { key: 'st_lista_espera', label: 'A lista de espera' },
+      ],
+      onClick: ({ key }: any) => {
+        if (key === 'comment') setComment(s);
+        else if (key === 'slots' && g) openSlots(g, s, null);
+        else if (key === 'quit' && g) quitarGrupo(s.enrollmentId, g.id);
+        else if (key.startsWith('st_')) setStatus(s.enrollmentId, key.slice(3));
+      },
+    };
+    return (
+      <div key={s.enrollmentId + (g ? ':' + g.id : ':pool')} draggable
+        onDragStart={() => setDrag({ enrollmentId: s.enrollmentId, fromGroupId: g ? g.id : null })}
+        onDragEnd={() => setDrag(null)}
+        style={{ background: st.bg, border: `1px solid ${st.border}`, borderRadius: 6, padding: '4px 8px', marginBottom: 4, cursor: 'grab' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontSize: 13 }}>{st.tick && '✓ '}{s.studentName}{s.comment && <Tooltip title={s.comment}><span style={{ marginLeft: 4 }}>💬</span></Tooltip>}</span>
+          <Dropdown menu={menu} trigger={['click']}><Button type="text" size="small">⋯</Button></Dropdown>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4, marginTop: 2 }}>
+          <Select size="small" style={{ width: 110 }} placeholder="Nivel" value={s.apoyoLevel || undefined} options={LEVELS} onChange={(v) => setLevel(s.enrollmentId, v)} />
+          <span style={{ fontSize: 11, color: '#6B6B7B' }}>{Number(s.totalHours)}h · {s.monthly == null ? 'revisar' : Number(s.monthly).toFixed(2) + '€'}</span>
+        </div>
+        {g && <Text type="secondary" style={{ fontSize: 11 }}>{slotsOf(s, g) || '(sin franjas)'}</Text>}
+      </div>
+    );
+  };
+
+  const colStyle = { maxHeight: '70vh', overflowY: 'auto' as const };
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-        <Title level={3} style={{ margin: 0 }}>Apoyo — franjas</Title>
-        <Space>
-          <Input placeholder="HH:MM" value={newTime} onChange={e => setNewTime(e.target.value)} style={{ width: 100 }} onPressEnter={addSlot} />
-          <Button onClick={addSlot}>+ Franja</Button>
-          <Button onClick={load} loading={loading}>Actualizar</Button>
-        </Space>
-      </div>
-      <Ayuda title="Organiza el apoyo por día, hora y sala (como vuestra hoja)">
-        Arrastra a los alumnos de <b>«Sin asignar»</b> o de <b>«Lista de espera»</b> a la celda del <b>día y la hora</b> que les toque.
-        Puedes moverlos entre celdas, cambiar su <b>sala</b> (menú ⋯) o devolverlos a «Sin asignar» arrastrándolos de vuelta.
-        Añade franjas horarias con <b>+ Franja</b>. Un alumno puede estar en <b>varias franjas</b>.
+      <Title level={3}>Apoyo</Title>
+      <Ayuda title="Organización de Apoyo por grupos (kanban)">
+        Arrastra alumnos de <b>Sin asignar</b> a un grupo: te preguntará a qué <b>franjas</b> viene y cuántas <b>horas</b> en cada una. Arrastrar de un grupo a otro lo <b>mueve</b>. El menú <b>⋯</b> cambia el estado, añade comentario o lo quita del grupo. La <b>tarifa</b> sale del <b>nivel</b> (Primaria/Secundaria/Bachillerato) y el <b>total de horas</b>. Las franjas de cada grupo se definen en Horarios y los tramos en Tarifas.
       </Ayuda>
-      <Row gutter={12}>
-        <Col xs={24} md={5}>
-          <div onDragOver={e => { e.preventDefault(); setOverKey('pool'); }} onDrop={dropOnPool}
-            style={{ border: overKey === 'pool' ? '2px dashed #579172' : '1px solid #E2DDD8', borderRadius: 10, padding: 10, marginBottom: 12, background: '#fff' }}>
-            <div style={{ fontWeight: 700, fontFamily: "'Lora',serif", marginBottom: 6 }}>Sin asignar <Tag>{pool.length}</Tag></div>
-            {pool.map((s: any) => (
-              <div key={s.enrollmentId} style={{ background: '#F5F2ED', border: '1px solid #E2DDD8', borderRadius: 6, padding: '4px 6px', marginBottom: 4 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 4, alignItems: 'center' }}>
-                  <div draggable onDragStart={() => setDrag({ enrollmentId: s.enrollmentId })} onDragEnd={() => { setDrag(null); setOverKey(null); }}
-                    style={{ cursor: 'grab', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.studentName} {eur(s.monthlyFee)}</div>
-                  <Dropdown trigger={['click']} menu={{ items: [{ key: 'w', label: 'A lista de espera' }], onClick: () => toWaitlist(s.enrollmentId) }}>
-                    <a style={{ color: '#9B9BAB', flexShrink: 0 }} onClick={e => e.preventDefault()}>⋯</a>
-                  </Dropdown>
-                </div>
-                <Select size="small" style={{ width: '100%', marginTop: 2 }} placeholder="Etapa" value={s.apoyoLevel || undefined}
-                  options={LEVELS} onChange={(v) => setLevel(s.enrollmentId, v)} />
-              </div>
-            ))}
-            {pool.length === 0 && <Text type="secondary" style={{ fontSize: 12 }}>—</Text>}
-          </div>
-          <div style={{ border: '1px solid #f0d0a0', borderRadius: 10, padding: 10, background: '#fff7ed' }}>
-            <div style={{ fontWeight: 700, fontFamily: "'Lora',serif", marginBottom: 6, color: '#b45309' }}>Lista de espera <Tag>{waitlist.length}</Tag></div>
-            {waitlist.map((s: any) => card(s.studentName, { enrollmentId: s.enrollmentId, fromWaitlist: true }))}
-            {waitlist.length === 0 && <Text type="secondary" style={{ fontSize: 12 }}>—</Text>}
-          </div>
-        </Col>
-        <Col xs={24} md={19}>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 640 }}>
-              <thead>
-                <tr>
-                  <th style={{ width: 56 }}></th>
-                  {APOYO_DAYS.map(d => <th key={d} style={{ padding: 6, fontSize: 13, fontFamily: "'Lora',serif", borderBottom: '2px solid #E2DDD8' }}>{['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'][d]}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {times.map(t => (
-                  <tr key={t}>
-                    <td style={{ fontSize: 12, fontWeight: 600, color: '#6B6B7B', textAlign: 'right', paddingRight: 6, verticalAlign: 'top', whiteSpace: 'nowrap' }}>
-                      {t}
-                      <Popconfirm title={`¿Eliminar la franja ${t}? Se quitará de todos los días.`} okText="Eliminar" cancelText="No" onConfirm={() => deleteSlot(t)}>
-                        <a style={{ color: '#cf1322', marginLeft: 4, fontSize: 11 }} title="Eliminar franja">✕</a>
-                      </Popconfirm>
-                    </td>
-                    {APOYO_DAYS.map(d => {
-                      const k = `${d}-${t}`;
-                      return (
-                        <td key={k} onDragOver={e => { e.preventDefault(); setOverKey(k); }} onDrop={() => dropOnCell(d, t)}
-                          style={{ border: '1px solid #EDE9E4', background: overKey === k ? '#EEF5FA' : '#fff', verticalAlign: 'top', padding: 4, minWidth: 110, height: 56 }}>
-                          {cell(d, t).map((a: any) => (
-                            <div key={a.id} style={{ background: '#F5F2ED', border: '1px solid #E2DDD8', borderRadius: 6, padding: '4px 6px', fontSize: 12, marginBottom: 4 }}>
-                              <div draggable onDragStart={() => setDrag({ enrollmentId: a.enrollmentId, assignmentId: a.id })} onDragEnd={() => { setDrag(null); setOverKey(null); }}
-                                style={{ cursor: 'grab', display: 'flex', justifyContent: 'space-between', gap: 4, alignItems: 'center' }}>
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.studentName}{a.room ? <Tag style={{ marginLeft: 4 }}>{a.room}</Tag> : null}</span>
-                                <Dropdown trigger={['click']} menu={{ items: [
-                                  { key: 'r', label: 'Cambiar sala' },
-                                  { key: 'h', label: `Horas de la franja (${Number(a.hours)})` },
-                                  { key: 'd', label: 'Quitar de la franja' },
-                                ], onClick: ({ key }: any) => key === 'r' ? setRoom(a) : key === 'h' ? setAssignHours(a.id) : api.delete(`/apoyo/assignment/${a.id}`).then(load) }}>
-                                  <a style={{ color: '#9B9BAB', flexShrink: 0 }} onClick={e => e.preventDefault()}>⋯</a>
-                                </Dropdown>
-                              </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
-                                <Select size="small" style={{ width: 110 }} placeholder="Etapa" value={a.apoyoLevel || undefined}
-                                  options={LEVELS} onChange={(v) => setLevel(a.enrollmentId, v)} />
-                                <span style={{ fontSize: 11, color: '#6B6B7B' }}>{Number(a.totalHours)}h · {a.monthlyFee == null ? '—' : Number(a.monthlyFee).toFixed(2) + '€'}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Col>
-      </Row>
+      <Card>
+        <Space style={{ marginBottom: 12 }} wrap><Button onClick={load}>Actualizar</Button></Space>
+        <Row gutter={12}>
+          <Col xs={24} md={6}>
+            <Card size="small" title={`Sin asignar (${bolsa.length})`} style={{ background: '#FAFAF8' }} styles={{ body: colStyle }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => { setOverCol(null); if (drag && drag.fromGroupId) { quitarGrupo(drag.enrollmentId, drag.fromGroupId); } setDrag(null); }}>
+              {bolsa.map((s: any) => card(s, null))}
+              {!bolsa.length && <Text type="secondary">Todos asignados</Text>}
+            </Card>
+          </Col>
+          <Col xs={24} md={18}>
+            <Row gutter={[12, 12]}>
+              {data.groups.map((g: any) => (
+                <Col xs={24} lg={12} key={g.id}>
+                  <Card size="small" style={{ outline: overCol === g.id ? '2px solid #579172' : 'none' }}
+                    title={<span>{g.name} <Text type="secondary" style={{ fontSize: 11 }}>{(g.schedule || []).map((sl: any) => `${DOW[sl.weekday]} ${sl.startTime}`).join(' · ')}</Text></span>}
+                    styles={{ body: colStyle }}
+                    onDragOver={(e) => { e.preventDefault(); setOverCol(g.id); }}
+                    onDragLeave={() => setOverCol(null)}
+                    onDrop={() => { setOverCol(null); if (drag) { const s = data.students.find((x: any) => x.enrollmentId === drag.enrollmentId); if (s) openSlots(g, s, drag.fromGroupId); } setDrag(null); }}>
+                    {(g.schedule || []).length === 0 && <Text type="secondary" style={{ fontSize: 12 }}>Sin franjas — defínelas en Horarios</Text>}
+                    {inGroup(g).map((s: any) => card(s, g))}
+                    {!inGroup(g).length && (g.schedule || []).length > 0 && <Text type="secondary" style={{ fontSize: 11 }}>(arrastra alumnos aquí)</Text>}
+                  </Card>
+                </Col>
+              ))}
+            </Row>
+          </Col>
+        </Row>
+        <Card size="small" title="Resumen: horas y tarifa" style={{ marginTop: 12 }}>
+          <SearchableTable rowKey="enrollmentId" dataSource={data.students} size="small" pagination={{ pageSize: 15 }}
+            columns={[
+              { title: 'Alumno', dataIndex: 'studentName' },
+              { title: 'Estado', dataIndex: 'status', render: (s: any) => <Tag color={s === 'matriculado' ? 'green' : s === 'lista_espera' ? 'orange' : s === 'preinscrito' ? 'gold' : 'blue'}>{orgStat(s).label}</Tag> },
+              { title: 'Nivel', dataIndex: 'apoyoLevel', render: (l: any) => l ? <Tag>{l}</Tag> : <Tag color="red">sin nivel</Tag> },
+              { title: 'Horas', dataIndex: 'totalHours', align: 'center', render: (h: any) => `${Number(h)}h` },
+              { title: 'Tarifa/mes', dataIndex: 'monthly', align: 'right', render: (m: any) => m != null ? `${Number(m).toFixed(2)} €` : <Tag color="red">revisar</Tag> },
+            ]} />
+        </Card>
+      </Card>
+      <ApoyoSlotsModal open={!!slotsModal} group={slotsModal?.group} student={slotsModal?.student} originGroupId={slotsModal?.originGroupId ?? null}
+        onClose={() => setSlotsModal(null)} onDone={() => { setSlotsModal(null); load(); }} />
     </div>
   );
 }
@@ -5319,7 +5315,7 @@ export default function App() {
     tareas: { icon: <FormOutlined />, label: 'Registro de tareas' },
     cuaderno: { icon: <FormOutlined />, label: 'Cuaderno docente' },
     horarios: { icon: <DashboardOutlined />, label: 'Horarios' },
-    apoyo: { icon: <AppstoreOutlined />, label: 'Apoyo (franjas)' },
+    apoyo: { icon: <AppstoreOutlined />, label: 'Apoyo' },
     danza: { icon: <AppstoreOutlined />, label: 'Danza' },
     examenes: { icon: <FormOutlined />, label: 'Simulacros' },
     mock: { icon: <DashboardOutlined />, label: 'Resultados Mock' },

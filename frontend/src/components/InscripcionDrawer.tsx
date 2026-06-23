@@ -636,6 +636,25 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
                       />
                     </Col>
                   </Row>
+                  {en.serviceCode === 'APOYO' && (
+                    <div style={{ marginTop: 8 }}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>Etapa (tarifa de Apoyo)</Text>
+                      <Select
+                        style={{ width: '100%' }}
+                        placeholder="Primaria / Secundaria / Bachillerato"
+                        value={en.apoyoLevel || undefined}
+                        onChange={async (v) => {
+                          try { await api.patch(`/enrollments/${en.id}`, { apoyoLevel: v }); message.success('Etapa actualizada'); reloadEnrollments(); }
+                          catch { message.error('Error al cambiar la etapa'); }
+                        }}
+                        options={[
+                          { value: 'primaria', label: 'Primaria' },
+                          { value: 'secundaria', label: 'Secundaria' },
+                          { value: 'bachillerato', label: 'Bachillerato' },
+                        ]}
+                      />
+                    </div>
+                  )}
                 </div>
               );
             })}

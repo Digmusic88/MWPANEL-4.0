@@ -1083,6 +1083,18 @@ function Tarifas() {
   const [programs, setPrograms] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
   const [years, setYears] = useState<any[]>([]);
+  const [tiers, setTiers] = useState<any[]>([]);
+  const [tierOpen, setTierOpen] = useState(false);
+  const [tierForm] = Form.useForm();
+  const loadTiers = async () => { try { const { data } = await api.get('/apoyo/fee-tiers'); setTiers(data); } catch { /* */ } };
+  const openTier = () => { tierForm.resetFields(); const ay = years.find(y => y.isActive)?.id; tierForm.setFieldsValue({ academicYearId: ay, etapa: 'primaria', concept: 'mensualidad' }); setTierOpen(true); };
+  const saveTier = async (v: any) => {
+    try { const { data } = await api.post('/apoyo/fee-tiers', v);
+      if (data?.ok === false) { message.warning(data.error); return; }
+      message.success('Tramo guardado'); setTierOpen(false); loadTiers();
+    } catch (e: any) { message.error(e?.response?.data?.message || 'Error'); }
+  };
+  const delTier = async (id: string) => { await api.delete(`/apoyo/fee-tiers/${id}`); message.success('Tramo eliminado'); loadTiers(); };
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form] = Form.useForm();
@@ -1093,6 +1105,7 @@ function Tarifas() {
     api.get('/catalog/programs').then(r => setPrograms(r.data));
     api.get('/catalog/groups').then(r => setGroups(r.data));
     api.get('/catalog/years').then(r => setYears(r.data));
+    loadTiers();
   }, []);
   const openNew = () => { setEditing(null); form.resetFields();
     const activeYear = years.find(y => y.isActive)?.id;
@@ -1141,6 +1154,44 @@ function Tarifas() {
             { title: '', render: (_, r) => <Space><Button size="small" onClick={() => openEdit(r)}>Editar</Button><Popconfirm title="¿Desactivar tarifa?" onConfirm={() => remove(r.id)}><Button size="small" danger>Quitar</Button></Popconfirm></Space> },
           ]} />
       </Card>
+      <Card style={{ marginTop: 16 }} title="Tarifas de Apoyo (por etapa y horas)"
+        extra={<Button type="primary" icon={<PlusOutlined />} onClick={openTier}>Nuevo tramo</Button>}>
+        <Ayuda title="Cómo funcionan los tramos de Apoyo">
+          La <b>mensualidad</b> se define por <b>etapa</b> (Primaria/Secundaria/Bachillerato) y <b>nº de horas</b> semanales:
+          se aplica el tramo cuyas horas no superen las del alumno (suma de sus franjas). La <b>matrícula</b> y el <b>material</b>
+          son fijos por etapa (deja las horas vacías). Un precio especial puntual se sigue poniendo en la matrícula del alumno (override).
+        </Ayuda>
+        <SearchableTable rowKey="id" dataSource={tiers} pagination={{ pageSize: 12 }}
+          columns={[
+            { title: 'Etapa', dataIndex: 'etapa', render: (e: string) => <Tag>{e}</Tag> },
+            { title: 'Concepto', dataIndex: 'concept', render: (c: string) => <Tag>{c}</Tag> },
+            { title: 'Horas', dataIndex: 'hours', render: (h: any) => h == null ? <Text type="secondary">fijo</Text> : `${Number(h)} h` },
+            { title: 'Importe', dataIndex: 'amount', render: (a: any) => <b>{Number(a).toFixed(2)} €</b> },
+            { title: '', render: (_: any, r: any) => <Popconfirm title="¿Eliminar tramo?" onConfirm={() => delTier(r.id)}><Button size="small" danger>Quitar</Button></Popconfirm> },
+          ]} />
+      </Card>
+      <Modal title="Nuevo tramo de Apoyo" open={tierOpen} onCancel={() => setTierOpen(false)} onOk={() => tierForm.submit()} okText="Guardar">
+        <Form form={tierForm} layout="vertical" onFinish={saveTier}>
+          <Form.Item name="academicYearId" label="Curso" rules={[{ required: true }]}>
+            <Select options={years.map(y => ({ value: y.id, label: y.label }))} />
+          </Form.Item>
+          <Form.Item name="etapa" label="Etapa" rules={[{ required: true }]}>
+            <Select options={[{ value: 'primaria', label: 'Primaria' }, { value: 'secundaria', label: 'Secundaria' }, { value: 'bachillerato', label: 'Bachillerato' }]} />
+          </Form.Item>
+          <Form.Item name="concept" label="Concepto" rules={[{ required: true }]}>
+            <Select options={[{ value: 'mensualidad', label: 'Mensualidad' }, { value: 'matricula', label: 'Matrícula' }, { value: 'material', label: 'Material' }]} />
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate>
+            {() => tierForm.getFieldValue('concept') === 'mensualidad' ? (
+              <Form.Item name="hours" label="Nº de horas/semana" rules={[{ required: true, message: 'Indica las horas del tramo' }]}
+                tooltip="El tramo se aplica si las horas del alumno son ≥ a este valor (se coge el mayor que no las supere)">
+                <InputNumber min={0.5} step={0.5} style={{ width: '100%' }} addonAfter="h" />
+              </Form.Item>
+            ) : <Alert type="info" showIcon style={{ marginBottom: 12 }} message="Matrícula/material: importe fijo por etapa (sin horas)." />}
+          </Form.Item>
+          <Form.Item name="amount" label="Importe (€)" rules={[{ required: true }]}><InputNumber min={0} step={0.5} style={{ width: '100%' }} /></Form.Item>
+        </Form>
+      </Modal>
       <Modal title={editing ? 'Editar tarifa' : 'Nueva tarifa'} open={open} onCancel={() => setOpen(false)} onOk={() => form.submit()} okText="Guardar">
         <Form form={form} layout="vertical" onFinish={save}>
           <Form.Item name="academicYearId" label="Curso" rules={[{ required: true }]}>
@@ -4494,6 +4545,23 @@ function ApoyoBoard() {
   useLiveQuery(['apoyo', 'enrollments'], load);
   useEffect(() => { load(); }, []);
 
+  const LEVELS = [
+    { value: 'primaria', label: 'Primaria' },
+    { value: 'secundaria', label: 'Secundaria' },
+    { value: 'bachillerato', label: 'Bachillerato' },
+  ];
+  const eur = (n: any) => (n == null ? <Tag color="red">revisar</Tag> : <Tag color="green">{Number(n).toFixed(2)} €</Tag>);
+  const setLevel = async (enrollmentId: string, apoyoLevel: string) => {
+    try { await api.patch(`/enrollments/${enrollmentId}`, { apoyoLevel }); load(); } catch { message.error('Error'); }
+  };
+  const setAssignHours = async (assignmentId: string) => {
+    const v = window.prompt('Horas de esta franja (p. ej. 1 o 0.5)');
+    if (v === null) return;
+    const hours = Number(v.replace(',', '.'));
+    if (!Number.isFinite(hours) || hours <= 0) { message.warning('Número de horas inválido'); return; }
+    try { await api.patch(`/apoyo/assignment/${assignmentId}/hours`, { hours }); load(); } catch { message.error('Error'); }
+  };
+
   const times: string[] = (data.slots && data.slots.length) ? data.slots : APOYO_DEFAULT_TIMES;
   const addSlot = async () => {
     if (!/^\d{1,2}:\d{2}$/.test(newTime)) { message.warning('Formato HH:MM'); return; }
@@ -4564,7 +4632,14 @@ function ApoyoBoard() {
           <div onDragOver={e => { e.preventDefault(); setOverKey('pool'); }} onDrop={dropOnPool}
             style={{ border: overKey === 'pool' ? '2px dashed #579172' : '1px solid #E2DDD8', borderRadius: 10, padding: 10, marginBottom: 12, background: '#fff' }}>
             <div style={{ fontWeight: 700, fontFamily: "'Lora',serif", marginBottom: 6 }}>Sin asignar <Tag>{pool.length}</Tag></div>
-            {pool.map((s: any) => card(s.studentName, { enrollmentId: s.enrollmentId }, { menu: { items: [{ key: 'w', label: 'A lista de espera' }], onClick: () => toWaitlist(s.enrollmentId) } }))}
+            {pool.map((s: any) => (
+              <div key={s.enrollmentId} style={{ background: '#F5F2ED', border: '1px solid #E2DDD8', borderRadius: 6, padding: '4px 6px', marginBottom: 4 }}>
+                <div draggable onDragStart={() => setDrag({ enrollmentId: s.enrollmentId })} onDragEnd={() => { setDrag(null); setOverKey(null); }}
+                  style={{ cursor: 'grab', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.studentName} {eur(s.monthlyFee)}</div>
+                <Select size="small" style={{ width: '100%', marginTop: 2 }} placeholder="Etapa" value={s.apoyoLevel || undefined}
+                  options={LEVELS} onChange={(v) => setLevel(s.enrollmentId, v)} />
+              </div>
+            ))}
             {pool.length === 0 && <Text type="secondary" style={{ fontSize: 12 }}>—</Text>}
           </div>
           <div style={{ border: '1px solid #f0d0a0', borderRadius: 10, padding: 10, background: '#fff7ed' }}>
@@ -4596,10 +4671,26 @@ function ApoyoBoard() {
                       return (
                         <td key={k} onDragOver={e => { e.preventDefault(); setOverKey(k); }} onDrop={() => dropOnCell(d, t)}
                           style={{ border: '1px solid #EDE9E4', background: overKey === k ? '#EEF5FA' : '#fff', verticalAlign: 'top', padding: 4, minWidth: 110, height: 56 }}>
-                          {cell(d, t).map((a: any) => card(a.studentName, { enrollmentId: a.enrollmentId, assignmentId: a.id }, {
-                            room: a.room,
-                            menu: { items: [{ key: 'r', label: 'Cambiar sala' }, { key: 'd', label: 'Quitar de la franja' }], onClick: ({ key }: any) => key === 'r' ? setRoom(a) : api.delete(`/apoyo/assignment/${a.id}`).then(load) },
-                          }))}
+                          {cell(d, t).map((a: any) => (
+                            <div key={a.id} style={{ background: '#F5F2ED', border: '1px solid #E2DDD8', borderRadius: 6, padding: '4px 6px', fontSize: 12, marginBottom: 4 }}>
+                              <div draggable onDragStart={() => setDrag({ enrollmentId: a.enrollmentId, assignmentId: a.id })} onDragEnd={() => { setDrag(null); setOverKey(null); }}
+                                style={{ cursor: 'grab', display: 'flex', justifyContent: 'space-between', gap: 4, alignItems: 'center' }}>
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.studentName}{a.room ? <Tag style={{ marginLeft: 4 }}>{a.room}</Tag> : null}</span>
+                                <Dropdown trigger={['click']} menu={{ items: [
+                                  { key: 'r', label: 'Cambiar sala' },
+                                  { key: 'h', label: `Horas de la franja (${Number(a.hours)})` },
+                                  { key: 'd', label: 'Quitar de la franja' },
+                                ], onClick: ({ key }: any) => key === 'r' ? setRoom(a) : key === 'h' ? setAssignHours(a.id) : api.delete(`/apoyo/assignment/${a.id}`).then(load) }}>
+                                  <a style={{ color: '#9B9BAB', flexShrink: 0 }} onClick={e => e.preventDefault()}>⋯</a>
+                                </Dropdown>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
+                                <Select size="small" style={{ width: 110 }} placeholder="Etapa" value={a.apoyoLevel || undefined}
+                                  options={LEVELS} onChange={(v) => setLevel(a.enrollmentId, v)} />
+                                <span style={{ fontSize: 11, color: '#6B6B7B' }}>{Number(a.totalHours)}h · {a.monthlyFee == null ? '—' : Number(a.monthlyFee).toFixed(2) + '€'}</span>
+                              </div>
+                            </div>
+                          ))}
                         </td>
                       );
                     })}

@@ -15,6 +15,7 @@ import { useLiveQuery } from './realtime/useLiveQuery';
 import { useRoomPresence } from './realtime/useRoomPresence';
 import { PresenceBar } from './components/PresenceBar';
 import { EditingBadge } from './components/EditingBadge';
+import MockResultsPanel from './components/MockResultsPanel';
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -869,15 +870,7 @@ function FichaAlumno({ studentId, open, onClose }: { studentId?: string; open: b
 
         {card(<span>Resultados de exámenes Mock {s.mockUserId ? '' : <Tag style={{ marginLeft: 6 }}>no enlazado</Tag>}</span>,
           !s.mockUserId ? <Text type="secondary">Este alumno no está enlazado con Cambridge Mocks (enlázalo en «Resultados Mock»).</Text> :
-          !mock || mock.calls.length === 0 ? <Text type="secondary">Sin resultados publicados todavía.</Text> :
-          mock.calls.map((c: any, i: number) => (
-            <div key={i} style={{ marginBottom: 10 }}>
-              <Text strong>{c.examName}</Text> <Text type="secondary">· {fmtDate(c.examDate)}</Text>
-              {c.overall != null && <Tag color="purple" style={{ marginLeft: 6 }}>Global: {c.overall}</Tag>}
-              <Table rowKey="part" size="small" pagination={false} style={{ marginTop: 4 }} dataSource={c.parts}
-                columns={[{ title: 'Parte', dataIndex: 'part' }, { title: 'Nota', dataIndex: 'score', render: (v: any) => v != null ? Number(v).toFixed(2) : '—' }]} />
-            </div>
-          )))}
+          <MockResultsPanel data={mock} />)}
 
         {card('Documentación', data.documents.length ? (
           <Space wrap>{data.documents.map((d: any, i: number) => <Tag key={i} color={d.status === 'recibido' ? 'green' : d.status === 'caducado' ? 'red' : 'default'}>{d.document}: {d.status}</Tag>)}</Space>

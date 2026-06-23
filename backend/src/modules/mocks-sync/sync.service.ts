@@ -65,8 +65,8 @@ export class SyncService {
                 s.mock_user_id      AS "mockUserId"
          FROM secretaria.exam_sessions es
          JOIN secretaria.academic_years ay ON ay.id = es.academic_year_id AND ay.is_active = true
-         JOIN secretaria.exam_candidates ec ON ec.session_id = es.id AND ec.status = 'asiste'
-         JOIN secretaria.students s ON s.id = ec.student_id AND s.is_active = true
+         LEFT JOIN secretaria.exam_candidates ec ON ec.session_id = es.id AND ec.status = 'asiste'
+         LEFT JOIN secretaria.students s ON s.id = ec.student_id AND s.is_active = true
          WHERE es.level IN ('KEY','PET','FCE','CAE')
          ORDER BY es.exam_date, es.id`,
       );

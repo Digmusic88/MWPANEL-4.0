@@ -5246,9 +5246,12 @@ export default function App() {
   const isOnlyTeacher = roles.includes('secretaria_teacher')
     && !roles.some(r => ['secretaria_admin', 'secretaria_staff', 'direccion'].includes(r));
   // Configuración: admin/staff/dirección (las pestañas internas sensibles se limitan a admin). Profesor: no.
+  const canSyncMocks = roles.some(r => ['secretaria_admin', 'direccion'].includes(r));
   const allowedKeys = new Set<string>(
     isOnlyTeacher ? TEACHER_VIEWS : ALL_KEYS
   );
+  // syncmocks solo es accesible para secretaria_admin y direccion
+  if (!canSyncMocks) allowedKeys.delete('syncmocks');
   const safeView = allowedKeys.has(view) ? view : 'dashboard';
   const groupItems = GROUPS.map(g => {
     const children = g.children.filter(k => allowedKeys.has(k)).map(k => ({ key: k, icon: LABELS[k].icon, label: LABELS[k].label }));

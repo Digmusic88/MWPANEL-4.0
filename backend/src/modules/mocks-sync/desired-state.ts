@@ -8,7 +8,7 @@ export type GroupStudentRow = {
   mockUserId?: number | null;
 };
 
-export type DesiredStudent = { externalId: string; fullName: string; mockUserId: number | null };
+export type DesiredStudent = { externalId: string; fullName: string; mockUserId: number | null; firstName: string; lastName: string };
 export type DesiredGroup = {
   externalId: string;
   name: string;
@@ -32,7 +32,10 @@ export function buildDesiredState(rows: GroupStudentRow[]): DesiredGroup[] {
       if (!s.has(r.studentExternalId)) {
         s.add(r.studentExternalId);
         const fullName = `${r.firstName ?? ''} ${r.lastName ?? ''}`.replace(/\s+/g, ' ').trim();
-        g.students.push({ externalId: r.studentExternalId, fullName, mockUserId: r.mockUserId ?? null });
+        g.students.push({
+          externalId: r.studentExternalId, fullName, mockUserId: r.mockUserId ?? null,
+          firstName: (r.firstName ?? '').trim(), lastName: (r.lastName ?? '').trim(),
+        });
       }
     }
   }

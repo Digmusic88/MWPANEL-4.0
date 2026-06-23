@@ -111,3 +111,17 @@ test('trend flat con dos convocatorias iguales; null con una sola convocatoria',
   assert.equal(mSingle.kpis.trend, null);
   assert.equal(mSingle.kpis.count, 1);
 });
+
+test('examDate no-string (epoch numérico) ordena bien y no rompe', () => {
+  // El SQLite de Mocks puede devolver examDate como número epoch (ms), no string.
+  // Antes esto rompía con "localeCompare is not a function".
+  const calls: RawCall[] = [
+    { examName: 'Nuevo', examDate: 1_715_000_000_000 as unknown as string, parts: [{ part: 'Reading', score: 80, status: 'PRESENTED' }] },
+    { examName: 'Viejo', examDate: 1_705_000_000_000 as unknown as string, parts: [{ part: 'Reading', score: 60, status: 'PRESENTED' }] },
+  ];
+  const m = computeMockMetrics(calls);
+  // Orden cronológico ascendente → la última (más reciente) es "Nuevo"
+  assert.equal(m.evolution[m.evolution.length - 1].examName, 'Nuevo');
+  assert.equal(m.kpis.last, 80);
+  assert.equal(m.kpis.trend, 'up');
+});

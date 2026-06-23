@@ -24,9 +24,21 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
+/**
+ * Valor ordenable de una fecha de convocatoria. El SQLite de Mocks puede
+ * devolver examDate como string ISO, número epoch o Date — no siempre string.
+ * Los nulos/indefinidos van al final.
+ */
+function dateSortValue(d: unknown): number {
+  if (d == null || d === '') return Number.POSITIVE_INFINITY;
+  if (typeof d === 'number') return d;
+  const t = new Date(d as string | Date).getTime();
+  return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
+}
+
 export function computeMockMetrics(calls: RawCall[]): MockMetrics {
   // Orden cronológico ascendente (las fechas null al final, estable)
-  const sorted = [...calls].sort((a, b) => (a.examDate || '').localeCompare(b.examDate || ''));
+  const sorted = [...calls].sort((a, b) => dateSortValue(a.examDate) - dateSortValue(b.examDate));
 
   const enriched: EnrichedCall[] = sorted.map((c) => {
     const parts: EnrichedPart[] = c.parts.map((p) => ({ ...p, kind: classifyPart(p) }));

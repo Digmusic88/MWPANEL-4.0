@@ -94,6 +94,8 @@ export class CatalogController {
       for (const p of ps) programServiceMap[p.id] = p.service_id;
     }
 
+    // Nota: esta resolución por grupo/programa/servicio no cubre la tarifa de Apoyo por etapa+horas
+    // (Apoyo se calcula en SQL con secretaria.fn_resolve_apoyo_fee y no usa grupos). No reutilizar para Apoyo sin adaptarla.
     const resolveFee = (group: (typeof groups)[0], concept: string): { amount: number | null; isCustom: boolean } => {
       const custom = customByGroup[group.id]?.[concept];
       if (custom !== undefined) return { amount: custom, isCustom: true };

@@ -80,6 +80,10 @@ export class FeeSchedulesController {
   private async resolveConceptFee(
     yearId: string, serviceId: string, groupId: string | null, concept: string,
   ): Promise<number | null> {
+    // OJO: esta previsualización en TS NO contempla la tarifa de Apoyo por etapa+horas
+    // (esa se resuelve en SQL con secretaria.fn_resolve_apoyo_fee). Hoy ningún flujo de Apoyo
+    // pasa por aquí (Apoyo no usa grupo/programa). Si se reutiliza este preview para Apoyo,
+    // añadir la rama Apoyo o devolverá un importe incorrecto por la cadena grupo→programa→servicio.
     // 1. Tarifa propia del grupo
     if (groupId) {
       const g = await this.ds.query(

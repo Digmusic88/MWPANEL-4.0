@@ -45,4 +45,69 @@ test('un alumno sin ninguna nota da KPIs nulos, no ceros', () => {
   assert.equal(m.kpis.best, null);
   assert.equal(m.kpis.count, 0);
   assert.equal(m.skills.find(s => s.name === 'Reading')?.latestNp, true);
+  // all-NP: last y trend también son null
+  assert.equal(m.kpis.last, null);
+  assert.equal(m.kpis.trend, null);
+});
+
+test('classifyPart NP es case-insensitive (not_presented, Absent)', () => {
+  assert.equal(classifyPart({ part: 'Reading', score: null, status: 'not_presented' }), 'np');
+  assert.equal(classifyPart({ part: 'Reading', score: null, status: 'Absent' }), 'np');
+});
+
+test('backward-scan: NP en la ultima call es el estado mas reciente (latestNp=true)', () => {
+  // La destreza tiene nota en call-1 pero NP en call-2 (la mas reciente).
+  // El backward-scan se detiene en el NP, por lo que latestNp=true y latest=null.
+  const calls: RawCall[] = [
+    {
+      examName: 'Mock 1', examDate: '2026-01-10',
+      parts: [{ part: 'Reading', score: 65, status: 'PRESENTED' }],
+    },
+    {
+      examName: 'Mock 2', examDate: '2026-03-10',
+      parts: [{ part: 'Reading', score: null, status: 'NOT_PRESENTED' }],
+    },
+  ];
+  const m = computeMockMetrics(calls);
+  const reading = m.skills.find(s => s.name === 'Reading')!;
+  // El estado mas reciente es NP (call-2) — eso es lo que devuelve el backward-scan
+  assert.equal(reading.latestNp, true);
+  assert.equal(reading.latest, null);
+});
+
+test('backward-scan: NP en call-1, nota en call-2 devuelve la nota (scored wins over earlier NP)', () => {
+  // La destreza tiene NP en call-1 pero nota en call-2 (la mas reciente).
+  // El backward-scan encuentra primero la nota → latest=65, latestNp=false.
+  const calls: RawCall[] = [
+    {
+      examName: 'Mock 1', examDate: '2026-01-10',
+      parts: [{ part: 'Reading', score: null, status: 'NOT_PRESENTED' }],
+    },
+    {
+      examName: 'Mock 2', examDate: '2026-03-10',
+      parts: [{ part: 'Reading', score: 65, status: 'PRESENTED' }],
+    },
+  ];
+  const m = computeMockMetrics(calls);
+  const reading = m.skills.find(s => s.name === 'Reading')!;
+  assert.equal(reading.latest, 65);
+  assert.equal(reading.latestNp, false);
+});
+
+test('trend flat con dos convocatorias iguales; null con una sola convocatoria', () => {
+  // Dos convocatorias con la misma nota → flat
+  const callsFlat: RawCall[] = [
+    { examName: 'M1', examDate: '2026-01-10', parts: [{ part: 'Reading', score: 70, status: 'PRESENTED' }] },
+    { examName: 'M2', examDate: '2026-03-10', parts: [{ part: 'Reading', score: 70, status: 'PRESENTED' }] },
+  ];
+  const mFlat = computeMockMetrics(callsFlat);
+  assert.equal(mFlat.kpis.trend, 'flat');
+
+  // Una sola convocatoria con nota → trend null
+  const callsSingle: RawCall[] = [
+    { examName: 'M1', examDate: '2026-01-10', parts: [{ part: 'Reading', score: 70, status: 'PRESENTED' }] },
+  ];
+  const mSingle = computeMockMetrics(callsSingle);
+  assert.equal(mSingle.kpis.trend, null);
+  assert.equal(mSingle.kpis.count, 1);
 });

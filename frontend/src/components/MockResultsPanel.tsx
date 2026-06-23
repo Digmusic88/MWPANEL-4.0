@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, Row, Col, Statistic, Progress, Tag, Empty, Segmented } from 'antd';
 import {
   ArrowUpOutlined, ArrowDownOutlined, MinusOutlined,
@@ -73,6 +73,9 @@ const sortSkills = (skills: Metrics['skills']) =>
 export default function MockResultsPanel({ data }: Props) {
   const [view, setView] = useState<string>('Global');
 
+  // FIX 3: reset skill toggle when student changes
+  useEffect(() => setView('Global'), [data]);
+
   if (!data || !data.metrics || data.metrics.calls.length === 0) {
     return <Empty description="Sin simulacros registrados" />;
   }
@@ -94,8 +97,7 @@ export default function MockResultsPanel({ data }: Props) {
           <Card size="small">
             <Statistic
               title="Último"
-              value={fmt(kpis.last)}
-              suffix={kpis.last != null ? '%' : ''}
+              valueRender={() => <span>{kpis.last == null ? '—' : `${kpis.last.toFixed(1)}%`}</span>}
             />
           </Card>
         </Col>
@@ -103,8 +105,7 @@ export default function MockResultsPanel({ data }: Props) {
           <Card size="small">
             <Statistic
               title="Mejor"
-              value={fmt(kpis.best)}
-              suffix={kpis.best != null ? '%' : ''}
+              valueRender={() => <span>{kpis.best == null ? '—' : `${kpis.best.toFixed(1)}%`}</span>}
             />
           </Card>
         </Col>
@@ -112,8 +113,7 @@ export default function MockResultsPanel({ data }: Props) {
           <Card size="small">
             <Statistic
               title="Media"
-              value={fmt(kpis.average)}
-              suffix={kpis.average != null ? '%' : ''}
+              valueRender={() => <span>{kpis.average == null ? '—' : `${kpis.average.toFixed(1)}%`}</span>}
             />
           </Card>
         </Col>
@@ -153,7 +153,7 @@ export default function MockResultsPanel({ data }: Props) {
               )}
             </div>
             <Progress
-              percent={s.latestNp ? 0 : (s.latest ?? 0)}
+              percent={s.latest == null ? undefined : s.latest}
               showInfo={false}
               strokeColor={s.latestNp ? '#D1D5DB' : skillColor(s.name)}
               trailColor={s.latestNp ? '#F3F4F6' : undefined}

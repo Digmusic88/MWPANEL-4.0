@@ -1094,7 +1094,10 @@ function Tarifas() {
       message.success('Tramo guardado'); setTierOpen(false); loadTiers();
     } catch (e: any) { message.error(e?.response?.data?.message || 'Error'); }
   };
-  const delTier = async (id: string) => { await api.delete(`/apoyo/fee-tiers/${id}`); message.success('Tramo eliminado'); loadTiers(); };
+  const delTier = async (id: string) => {
+    try { await api.delete(`/apoyo/fee-tiers/${id}`); message.success('Tramo eliminado'); loadTiers(); }
+    catch (e: any) { message.error(e?.response?.data?.message || 'Error al eliminar'); }
+  };
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form] = Form.useForm();

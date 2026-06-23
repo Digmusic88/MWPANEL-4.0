@@ -49,6 +49,7 @@ export type ExamCandidateRow = {
   examDate: string | null;
   level: string;
   studentExternalId: string | null;
+  candidateStatus: string | null; // 'asiste' | 'no_asiste' | 'sin_confirmar'
   mockUserId: number | null;
 };
 
@@ -57,7 +58,7 @@ export type DesiredExamCall = {
   name: string;
   examDate: string | null;
   level: string;
-  students: { externalId: string; mockUserId: number | null }[];
+  students: { externalId: string; mockUserId: number | null; attended: boolean }[];
 };
 
 /** Agrupa filas planas (convocatoria × candidato) en el payload de convocatorias del reconcile. */
@@ -75,7 +76,11 @@ export function buildExamCalls(rows: ExamCandidateRow[]): DesiredExamCall[] {
       const s = seen.get(r.sessionExternalId)!;
       if (!s.has(r.studentExternalId)) {
         s.add(r.studentExternalId);
-        c.students.push({ externalId: r.studentExternalId, mockUserId: r.mockUserId ?? null });
+        c.students.push({
+          externalId: r.studentExternalId,
+          mockUserId: r.mockUserId ?? null,
+          attended: r.candidateStatus === 'asiste',
+        });
       }
     }
   }

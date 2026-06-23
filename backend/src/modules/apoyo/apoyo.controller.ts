@@ -66,7 +66,7 @@ export class ApoyoController {
   }
 
   // Asignar (o actualizar horas de) un alumno a una franja de un grupo
-  @Post('assign') @Roles('secretaria_admin','secretaria_staff')
+  @Post('assign') @Roles('secretaria_admin','secretaria_staff','direccion')
   async assign(@Body() b: { enrollmentId: string; groupId: string; weekday: number; slotTime: string; hours?: number; room?: string }) {
     const chk = await this.ds.query(`
       SELECT 1 FROM secretaria.enrollments e JOIN secretaria.services se ON se.id=e.service_id
@@ -76,13 +76,13 @@ export class ApoyoController {
     await this.ds.query(
       `INSERT INTO secretaria.apoyo_assignments(enrollment_id, group_id, weekday, slot_time, room, hours)
        VALUES ($1,$2,$3,$4,$5,COALESCE($6,1))
-       ON CONFLICT (enrollment_id, group_id, weekday, slot_time) DO UPDATE SET hours=EXCLUDED.hours, room=EXCLUDED.room`,
+       ON CONFLICT (enrollment_id, group_id, weekday, slot_time) DO UPDATE SET hours=EXCLUDED.hours, room=COALESCE(EXCLUDED.room, secretaria.apoyo_assignments.room)`,
       [b.enrollmentId, b.groupId, b.weekday, b.slotTime, b.room || null, b.hours ?? null]);
     await this.ds.query(`UPDATE secretaria.enrollments SET group_id=$2 WHERE id=$1 AND group_id IS NULL`, [b.enrollmentId, b.groupId]);
     return { ok: true };
   }
 
-  @Patch('assignment/:id/hours') @Roles('secretaria_admin','secretaria_staff')
+  @Patch('assignment/:id/hours') @Roles('secretaria_admin','secretaria_staff','direccion')
   async setHours(@Param('id') id: string, @Body() b: { hours?: number }) {
     const h = Number(b.hours);
     if (!Number.isFinite(h) || h <= 0) return { ok: false, error: 'Horas inválidas' };
@@ -90,7 +90,7 @@ export class ApoyoController {
     return { ok: true };
   }
 
-  @Delete('assignment/:id') @Roles('secretaria_admin','secretaria_staff')
+  @Delete('assignment/:id') @Roles('secretaria_admin','secretaria_staff','direccion')
   async remove(@Param('id') id: string) {
     const rows = await this.ds.query(`DELETE FROM secretaria.apoyo_assignments WHERE id=$1 RETURNING enrollment_id`, [id]);
     const enr = rows[0]?.enrollment_id;
@@ -101,7 +101,7 @@ export class ApoyoController {
     return { ok: true };
   }
 
-  @Delete('assignments') @Roles('secretaria_admin','secretaria_staff')
+  @Delete('assignments') @Roles('secretaria_admin','secretaria_staff','direccion')
   async delGroupAssignments(@Query('enrollmentId') enrollmentId: string, @Query('groupId') groupId: string) {
     await this.ds.query(`DELETE FROM secretaria.apoyo_assignments WHERE enrollment_id=$1 AND group_id=$2`, [enrollmentId, groupId]);
     const rest = await this.ds.query(`SELECT group_id FROM secretaria.apoyo_assignments WHERE enrollment_id=$1 LIMIT 1`, [enrollmentId]);

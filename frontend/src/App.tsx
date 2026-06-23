@@ -4630,6 +4630,7 @@ function ApoyoBoard() {
   const [data, setData] = useState<any>({ groups: [], students: [] });
   const [drag, setDrag] = useState<{ enrollmentId: string; fromGroupId: string | null } | null>(null);
   const [slotsModal, setSlotsModal] = useState<{ group: any; student: any; originGroupId: string | null } | null>(null);
+  const [moveOrAdd, setMoveOrAdd] = useState<{ group: any; student: any; fromGroupId: string } | null>(null);
   const [overCol, setOverCol] = useState<string | null>(null);
   const activeYear = () => years.find(y => y.isActive);
   const load = async () => {
@@ -4691,7 +4692,7 @@ function ApoyoBoard() {
     <div>
       <Title level={3}>Apoyo</Title>
       <Ayuda title="Organización de Apoyo por grupos (kanban)">
-        Arrastra alumnos de <b>Sin asignar</b> a un grupo: te preguntará a qué <b>franjas</b> viene y cuántas <b>horas</b> en cada una. Arrastrar de un grupo a otro lo <b>mueve</b>. El menú <b>⋯</b> cambia el estado, añade comentario o lo quita del grupo. La <b>tarifa</b> sale del <b>nivel</b> (Primaria/Secundaria/Bachillerato) y el <b>total de horas</b>. Las franjas de cada grupo se definen en Horarios y los tramos en Tarifas.
+        Arrastra alumnos de <b>Sin asignar</b> a un grupo: te preguntará a qué <b>franjas</b> viene y cuántas <b>horas</b> en cada una. Arrastrar de un grupo a otro te pregunta si <b>mover</b> o <b>añadir</b> (un alumno puede estar en <b>varios grupos</b>, de varios días). El menú <b>⋯</b> cambia el estado, añade comentario o lo quita del grupo. La <b>tarifa</b> sale del <b>nivel</b> (Primaria/Secundaria/Bachillerato) y el <b>total de horas</b> de todos sus grupos. Las franjas de cada grupo se definen en Horarios y los tramos en Tarifas.
       </Ayuda>
       <Card>
         <Space style={{ marginBottom: 12 }} wrap><Button onClick={load}>Actualizar</Button></Space>
@@ -4713,7 +4714,17 @@ function ApoyoBoard() {
                     styles={{ body: colStyle }}
                     onDragOver={(e) => { e.preventDefault(); setOverCol(g.id); }}
                     onDragLeave={() => setOverCol(null)}
-                    onDrop={() => { setOverCol(null); if (drag) { const s = data.students.find((x: any) => x.enrollmentId === drag.enrollmentId); if (s) openSlots(g, s, drag.fromGroupId); } setDrag(null); }}>
+                    onDrop={() => {
+                      setOverCol(null);
+                      if (drag) {
+                        const s = data.students.find((x: any) => x.enrollmentId === drag.enrollmentId);
+                        if (s) {
+                          if (drag.fromGroupId && drag.fromGroupId !== g.id) setMoveOrAdd({ group: g, student: s, fromGroupId: drag.fromGroupId });
+                          else openSlots(g, s, null);
+                        }
+                      }
+                      setDrag(null);
+                    }}>
                     {(g.schedule || []).length === 0 && <Text type="secondary" style={{ fontSize: 12 }}>Sin franjas — defínelas en Horarios</Text>}
                     {inGroup(g).map((s: any) => card(s, g))}
                     {!inGroup(g).length && (g.schedule || []).length > 0 && <Text type="secondary" style={{ fontSize: 11 }}>(arrastra alumnos aquí)</Text>}
@@ -4736,6 +4747,15 @@ function ApoyoBoard() {
       </Card>
       <ApoyoSlotsModal open={!!slotsModal} group={slotsModal?.group} student={slotsModal?.student} originGroupId={slotsModal?.originGroupId ?? null}
         onClose={() => setSlotsModal(null)} onDone={() => { setSlotsModal(null); load(); }} />
+      <Modal open={!!moveOrAdd} title={`${moveOrAdd?.student?.studentName || ''} → ${moveOrAdd?.group?.name || ''}`}
+        onCancel={() => setMoveOrAdd(null)}
+        footer={[
+          <Button key="cancel" onClick={() => setMoveOrAdd(null)}>Cancelar</Button>,
+          <Button key="move" onClick={() => { const m = moveOrAdd!; setMoveOrAdd(null); openSlots(m.group, m.student, m.fromGroupId); }}>Mover aquí</Button>,
+          <Button key="add" type="primary" onClick={() => { const m = moveOrAdd!; setMoveOrAdd(null); openSlots(m.group, m.student, null); }}>Añadir a este grupo</Button>,
+        ]}>
+        <Text>¿<b>Mover</b> a {moveOrAdd?.student?.studentName} a <b>{moveOrAdd?.group?.name}</b> (se quita del grupo de origen) o <b>añadirlo</b> a este grupo conservando los demás?</Text>
+      </Modal>
     </div>
   );
 }

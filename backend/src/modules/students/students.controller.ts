@@ -176,14 +176,16 @@ export class StudentsController {
 
     const enrollments = await this.ds.query(`
       SELECT e.id, e.status, sv.name AS "serviceName", g.name AS "groupName",
+             ay.label AS "yearLabel", ay.is_active AS "yearActive",
              secretaria.fn_resolve_monthly_fee(e.id) AS "monthlyFee",
              (SELECT count(*)::int FROM secretaria.charges c WHERE c.enrollment_id=e.id AND c.status='pagado') AS "paid",
              (SELECT count(*)::int FROM secretaria.charges c WHERE c.enrollment_id=e.id AND c.status='pendiente') AS "pending",
              (SELECT COALESCE(sum(c.amount_due),0) FROM secretaria.charges c WHERE c.enrollment_id=e.id AND c.status='pendiente') AS "pendingAmount"
       FROM secretaria.enrollments e
       JOIN secretaria.services sv ON sv.id=e.service_id
+      JOIN secretaria.academic_years ay ON ay.id=e.academic_year_id
       LEFT JOIN secretaria.groups g ON g.id=e.group_id
-      WHERE e.student_id=$1 ORDER BY sv.name`, [id]);
+      WHERE e.student_id=$1 ORDER BY ay.is_active DESC, ay.label DESC, sv.name`, [id]);
 
     const levelTests = await this.ds.query(`
       SELECT lt.test_date AS "testDate", lt.test_time AS "testTime", lt.result_level AS "resultLevel",

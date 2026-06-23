@@ -828,6 +828,7 @@ function FichaAlumno({ studentId, open, onClose }: { studentId?: string; open: b
         {card('Matrículas', data.enrollments.length ? (
           <Table rowKey="id" size="small" pagination={false} dataSource={data.enrollments}
             columns={[
+              { title: 'Curso', dataIndex: 'yearLabel', render: (y: any, r: any) => <Tag color={r.yearActive ? 'blue' : 'default'}>{y || '—'}{r.yearActive ? ' · actual' : ''}</Tag> },
               { title: 'Servicio', dataIndex: 'serviceName' },
               { title: 'Grupo', dataIndex: 'groupName', render: (g: any) => g || '—' },
               { title: 'Estado', dataIndex: 'status', render: (st: any) => <Tag color={ENR_COLOR[st]}>{st}</Tag> },
@@ -5294,7 +5295,7 @@ export default function App() {
   // Control de acceso por rol: el menú y las vistas se filtran según el rol.
   const roles: string[] = user.secretariaRoles || [];
   const isAdmin = roles.includes('secretaria_admin');
-  const TEACHER_VIEWS = ['dashboard', 'chat', 'asistencia', 'tareas', 'examenes', 'horarios', 'nivel', 'reuniones', 'cuaderno']; // docente
+  const TEACHER_VIEWS = ['chat', 'asistencia', 'tareas', 'examenes', 'horarios', 'nivel', 'reuniones', 'cuaderno']; // docente ('dashboard'/Estadísticas global oculto)
   // Etiquetas/iconos de cada vista. Los datos "de configurar una vez" (grupos, programas,
   // tarifas, profesores, importar, equipo, curso) NO están en el menú: viven en pestañas
   // dentro de "Configuración".
@@ -5328,7 +5329,8 @@ export default function App() {
     config: { icon: <SettingOutlined />, label: 'Configuración' },
   };
   const GROUPS = [
-    { key: 'g_resumen', icon: <DashboardOutlined />, label: 'Resumen', children: ['dashboard', 'organizacion', 'apoyo', 'danza', 'eventos'] },
+    // 'dashboard' (Estadísticas global) oculto temporalmente del menú; para reactivarlo, añádelo de nuevo aquí (ruta y componente <Dashboard> siguen intactos).
+    { key: 'g_resumen', icon: <DashboardOutlined />, label: 'Resumen', children: ['organizacion', 'apoyo', 'danza', 'eventos'] },
     { key: 'g_alumnado', icon: <TeamOutlined />, label: 'Alumnado', children: ['alumnos', 'matriculas', 'familias', 'bajas', 'nivel', 'documentacion'] },
     { key: 'g_economico', icon: <EuroOutlined />, label: 'Económico', children: ['pagos', 'morosidad', 'remesas', 'rifas', 'taper', 'informes'] },
     { key: 'g_docencia', icon: <FormOutlined />, label: 'Docencia', children: ['asistencia', 'tareas', 'cuaderno', 'horarios', 'examenes', 'mock', 'syncmocks', 'reuniones', 'chat'] },
@@ -5344,13 +5346,15 @@ export default function App() {
   );
   // syncmocks solo es accesible para secretaria_admin y direccion
   if (!canSyncMocks) allowedKeys.delete('syncmocks');
-  const safeView = allowedKeys.has(view) ? view : 'dashboard';
   const groupItems = GROUPS.map(g => {
     const children = g.children.filter(k => allowedKeys.has(k)).map(k => ({ key: k, icon: LABELS[k].icon, label: LABELS[k].label }));
     return children.length ? { key: g.key, icon: g.icon, label: g.label, children } : null;
   }).filter(Boolean) as any[];
   const items = [...groupItems];
   if (allowedKeys.has('config')) items.push({ key: 'config', icon: LABELS.config.icon, label: LABELS.config.label });
+  // Fallback de vista: primera vista visible del menú del usuario (ya NO 'dashboard', que está oculto).
+  const firstVisible = (groupItems[0]?.children?.[0]?.key) || (items[0] as any)?.key || 'config';
+  const safeView = allowedKeys.has(view) ? view : firstVisible;
   const openGroup = GROUPS.find(g => g.children.includes(safeView))?.key;
   const brand = (
     <div style={{ padding: '16px 16px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>

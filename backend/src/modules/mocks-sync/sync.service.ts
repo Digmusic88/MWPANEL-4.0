@@ -1,0 +1,97 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import { buildDesiredState, GroupStudentRow } from './desired-state';
+import { MocksApiClient, ReconcileReport } from './mocks-api.client';
+
+@Injectable()
+export class SyncService {
+  private readonly log = new Logger('MocksSync');
+  private running = false;
+
+  constructor(
+    @InjectDataSource() private ds: DataSource,
+    private readonly mocks: MocksApiClient,
+  ) {}
+
+  async reconcile(trigger: 'change-feed' | 'cron' | 'manual') {
+    if (this.running) {
+      this.log.warn(`reconcile(${trigger}) omitido: ya hay uno en curso`);
+      return { ok: false, skipped: true } as any;
+    }
+    this.running = true;
+    const t0 = Date.now();
+    try {
+      // Año activo
+      const yearRows = await this.ds.query(
+        `SELECT label FROM secretaria.academic_years WHERE is_active = true LIMIT 1`,
+      );
+      if (!yearRows.length) throw new Error('No hay academic_year activo');
+      const academicYear: string = yearRows[0].label;
+
+      // Filas planas grupo × alumno (solo programas con mock_exam_type, año activo)
+      const rows: GroupStudentRow[] = await this.ds.query(
+        `SELECT g.id::text   AS "groupExternalId",
+                g.name        AS "groupName",
+                p.mock_exam_type AS "examType",
+                s.id::text    AS "studentExternalId",
+                s.first_name  AS "firstName",
+                s.last_name   AS "lastName"
+         FROM secretaria.groups g
+         JOIN secretaria.programs p ON p.id = g.program_id
+         JOIN secretaria.academic_years ay ON ay.id = g.academic_year_id AND ay.is_active = true
+         LEFT JOIN secretaria.enrollments e
+                ON e.group_id = g.id AND e.status <> 'baja'
+         LEFT JOIN secretaria.students s
+                ON s.id = e.student_id AND s.is_active = true
+         WHERE p.mock_exam_type IS NOT NULL
+         ORDER BY g.id, s.last_name, s.first_name`,
+      );
+
+      const groups = buildDesiredState(rows);
+      const report: ReconcileReport = await this.mocks.reconcile({ academicYear, groups });
+
+      // Persistir ids devueltos
+      for (const g of report.groups) {
+        await this.ds.query(
+          `UPDATE secretaria.groups SET mock_group_id = $1 WHERE id = $2::uuid AND (mock_group_id IS DISTINCT FROM $1)`,
+          [g.mockGroupId, g.externalId],
+        );
+      }
+      for (const s of report.students) {
+        await this.ds.query(
+          `UPDATE secretaria.students SET mock_user_id = $1 WHERE id = $2::uuid AND (mock_user_id IS DISTINCT FROM $1)`,
+          [s.mockUserId, s.externalId],
+        );
+      }
+
+      await this.writeLog(trigger, true, report, null, Date.now() - t0);
+      this.log.log(
+        `reconcile(${trigger}) ok: +${report.created} alumnos, ${report.enrolled} altas, ${report.unenrolled} bajas, ${report.renamed} renombrados, ${report.incidencias.length} incidencias`,
+      );
+      return { ...report, ok: true };
+    } catch (e: any) {
+      await this.writeLog(trigger, false, null, String(e?.message || e), Date.now() - t0);
+      this.log.error(`reconcile(${trigger}) FALLÓ: ${e?.message || e}`);
+      throw e;
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private async writeLog(
+    trigger: string, ok: boolean, report: ReconcileReport | null, error: string | null, durationMs: number,
+  ) {
+    await this.ds.query(
+      `INSERT INTO secretaria.mock_sync_log
+         (trigger, ok, created, renamed, enrolled, unenrolled, adopted, incidencias, error, duration_ms)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10)`,
+      [
+        trigger, ok,
+        report?.created ?? 0, report?.renamed ?? 0, report?.enrolled ?? 0,
+        report?.unenrolled ?? 0, report?.adopted ?? 0,
+        JSON.stringify(report?.incidencias ?? []), error, durationMs,
+      ],
+    );
+  }
+}

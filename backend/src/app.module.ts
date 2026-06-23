@@ -31,6 +31,7 @@ import { MeetingsModule } from './modules/meetings/meetings.module';
 import { CalendarioModule } from './modules/calendario/calendario.module';
 import { NotebookModule } from './modules/notebook/notebook.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { MocksSyncModule } from './modules/mocks-sync/mocks-sync.module';
 import { HealthController } from './health.controller';
 import { AuthModule } from './modules/auth/auth.module';
 
@@ -48,7 +49,7 @@ import { AuthModule } from './modules/auth/auth.module';
       autoLoadEntities: true,
       synchronize: false, // las tablas se gestionan por migraciones SQL
     }),
-    AuthModule, CatalogModule, FamiliesModule, StudentsModule, FeeSchedulesModule, EnrollmentsModule, PaymentsModule, SepaModule, DocumentsModule, ScheduleSlotsModule, LevelTestsModule, TaperModule, ReportsModule, ImportModule, RafflesModule, TeachersModule, AttendanceModule, MocksModule, ChatModule, AccessModule, ApoyoModule, StatsModule, HistoryModule, TareasModule, ExamenesModule, EventosModule, MeetingsModule, CalendarioModule, NotebookModule, RealtimeModule, DanzaModule,
+    AuthModule, CatalogModule, FamiliesModule, StudentsModule, FeeSchedulesModule, EnrollmentsModule, PaymentsModule, SepaModule, DocumentsModule, ScheduleSlotsModule, LevelTestsModule, TaperModule, ReportsModule, ImportModule, RafflesModule, TeachersModule, AttendanceModule, MocksModule, ChatModule, AccessModule, ApoyoModule, StatsModule, HistoryModule, TareasModule, ExamenesModule, EventosModule, MeetingsModule, CalendarioModule, NotebookModule, RealtimeModule, DanzaModule, MocksSyncModule,
   ],
   controllers: [HealthController],
 })

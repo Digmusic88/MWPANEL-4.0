@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { buildDesiredState, GroupStudentRow } from './desired-state';
+import { buildDesiredState, GroupStudentRow, buildExamCalls, ExamCandidateRow } from './desired-state';
 import { MocksApiClient, ReconcileReport } from './mocks-api.client';
 
 export type ReconcileOutcome = (ReconcileReport & { ok: true }) | { ok: false; skipped: true };
@@ -54,7 +54,25 @@ export class SyncService {
       );
 
       const groups = buildDesiredState(rows);
-      const report: ReconcileReport = await this.mocks.reconcile({ academicYear, groups });
+
+      // Convocatorias (exam_sessions de nivel KEY/PET/FCE/CAE del año activo) + candidatos 'asiste'
+      const examRows: ExamCandidateRow[] = await this.ds.query(
+        `SELECT es.id::text         AS "sessionExternalId",
+                es.name             AS "sessionName",
+                to_char(es.exam_date, 'YYYY-MM-DD') AS "examDate",
+                es.level            AS "level",
+                ec.student_id::text AS "studentExternalId",
+                s.mock_user_id      AS "mockUserId"
+         FROM secretaria.exam_sessions es
+         JOIN secretaria.academic_years ay ON ay.id = es.academic_year_id AND ay.is_active = true
+         JOIN secretaria.exam_candidates ec ON ec.session_id = es.id AND ec.status = 'asiste'
+         JOIN secretaria.students s ON s.id = ec.student_id AND s.is_active = true
+         WHERE es.level IN ('KEY','PET','FCE','CAE')
+         ORDER BY es.exam_date, es.id`,
+      );
+      const examCalls = buildExamCalls(examRows);
+
+      const report: ReconcileReport = await this.mocks.reconcile({ academicYear, groups, examCalls });
 
       // Persistir ids devueltos
       for (const g of report.groups) {
@@ -72,7 +90,7 @@ export class SyncService {
 
       await this.writeLog(trigger, true, report, null, Date.now() - t0);
       this.log.log(
-        `reconcile(${trigger}) ok: +${report.created} alumnos, ${report.enrolled} altas, ${report.unenrolled} bajas, ${report.renamed} renombrados, ${report.incidencias.length} incidencias`,
+        `reconcile(${trigger}) ok: +${report.created} alumnos, ${report.enrolled} altas, ${report.unenrolled} bajas, ${report.renamed} renombrados, +${report.examCallsCreated ?? 0} convocatorias (${report.examCallsLinked ?? 0} candidatos), ${report.incidencias.length} incidencias`,
       );
       return { ...report, ok: true as const };
     } catch (e: any) {

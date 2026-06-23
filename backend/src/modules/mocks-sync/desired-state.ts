@@ -41,3 +41,43 @@ export function buildDesiredState(rows: GroupStudentRow[]): DesiredGroup[] {
   }
   return [...groups.values()];
 }
+
+// ─── Convocatorias (exam_sessions) ────────────────────────────────────────────
+export type ExamCandidateRow = {
+  sessionExternalId: string;
+  sessionName: string;
+  examDate: string | null;
+  level: string;
+  studentExternalId: string | null;
+  mockUserId: number | null;
+};
+
+export type DesiredExamCall = {
+  externalId: string;
+  name: string;
+  examDate: string | null;
+  level: string;
+  students: { externalId: string; mockUserId: number | null }[];
+};
+
+/** Agrupa filas planas (convocatoria × candidato) en el payload de convocatorias del reconcile. */
+export function buildExamCalls(rows: ExamCandidateRow[]): DesiredExamCall[] {
+  const calls = new Map<string, DesiredExamCall>();
+  const seen = new Map<string, Set<string>>();
+  for (const r of rows) {
+    let c = calls.get(r.sessionExternalId);
+    if (!c) {
+      c = { externalId: r.sessionExternalId, name: r.sessionName, examDate: r.examDate, level: r.level, students: [] };
+      calls.set(r.sessionExternalId, c);
+      seen.set(r.sessionExternalId, new Set());
+    }
+    if (r.studentExternalId) {
+      const s = seen.get(r.sessionExternalId)!;
+      if (!s.has(r.studentExternalId)) {
+        s.add(r.studentExternalId);
+        c.students.push({ externalId: r.studentExternalId, mockUserId: r.mockUserId ?? null });
+      }
+    }
+  }
+  return [...calls.values()];
+}

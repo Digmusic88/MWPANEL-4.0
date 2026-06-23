@@ -3,7 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { Client } from 'pg';
 import { SyncService } from './sync.service';
 
-const SYNC_TABLES = new Set(['students', 'enrollments', 'groups']);
+const SYNC_TABLES = new Set(['students', 'enrollments', 'groups', 'exam_sessions', 'exam_candidates']);
 
 @Injectable()
 export class SyncTriggersService implements OnModuleInit, OnModuleDestroy {

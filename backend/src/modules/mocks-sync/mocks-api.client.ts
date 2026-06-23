@@ -1,15 +1,18 @@
 import { Injectable } from '@nestjs/common';
-import { DesiredGroup } from './desired-state';
+import { DesiredGroup, DesiredExamCall } from './desired-state';
 
 export type ReconcileReport = {
   academicYearId: number;
   groups: { externalId: string; mockGroupId: number }[];
   students: { externalId: string; mockUserId: number }[];
+  examCalls?: { externalId: string; mockExamCallId: number }[];
   created: number;
   renamed: number;
   enrolled: number;
   unenrolled: number;
   adopted: number;
+  examCallsCreated?: number;
+  examCallsLinked?: number;
   incidencias: string[];
 };
 
@@ -18,7 +21,7 @@ export class MocksApiClient {
   private readonly url = process.env.MOCKS_SYNC_URL || 'http://cambridge-mocks-app:3001';
   private readonly key = process.env.MOCKS_SYNC_KEY || '';
 
-  async reconcile(payload: { academicYear: string; groups: DesiredGroup[] }): Promise<ReconcileReport> {
+  async reconcile(payload: { academicYear: string; groups: DesiredGroup[]; examCalls?: DesiredExamCall[] }): Promise<ReconcileReport> {
     const res = await fetch(`${this.url}/api/sync/reconcile`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-sync-key': this.key },

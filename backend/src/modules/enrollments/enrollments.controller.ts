@@ -5,6 +5,7 @@ import { DataSource } from 'typeorm';
 import { SecretariaAuthGuard, Roles } from '../../common/secretaria-auth.guard';
 
 const STATUSES = ['preinscrito','matriculado','pendiente','lista_espera','baja'];
+const APOYO_LEVELS = ['primaria','secundaria','bachillerato'];
 
 class BulkBajaDto {
   @IsArray() @IsUUID('all', { each: true }) enrollmentIds: string[];
@@ -18,6 +19,7 @@ class UpdateEnrollmentDto {
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsNumber() customFee?: number;
   @IsOptional() @IsString() customFeeReason?: string;
+  @IsOptional() @IsIn(APOYO_LEVELS) apoyoLevel?: string | null;
 }
 
 @Controller('secretaria/enrollments')
@@ -109,6 +111,7 @@ export class EnrollmentsController {
     if (b.notes !== undefined) push('notes', b.notes);
     if (b.customFee !== undefined) push('custom_fee', b.customFee);
     if (b.customFeeReason !== undefined) push('custom_fee_reason', b.customFeeReason);
+    if (b.apoyoLevel !== undefined) push('apoyo_level', b.apoyoLevel || null);
     if (sets.length === 0) return { ok: true };
     params.push(id);
     await this.ds.query(`UPDATE secretaria.enrollments SET ${sets.join(', ')} WHERE id = $${params.length}`, params);

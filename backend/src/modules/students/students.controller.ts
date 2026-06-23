@@ -241,9 +241,9 @@ export class StudentsController {
        ORDER BY is_primary_contact DESC`, [student.familyId]);
 
     const enrollments = await this.ds.query(
-      `SELECT e.id, e.service_id AS "serviceId", sv.name AS "serviceName",
+      `SELECT e.id, e.service_id AS "serviceId", sv.name AS "serviceName", sv.code AS "serviceCode",
               e.group_id AS "groupId", g.name AS "groupName",
-              e.status, e.custom_fee AS "customFee",
+              e.status, e.custom_fee AS "customFee", e.apoyo_level AS "apoyoLevel",
               secretaria.fn_resolve_monthly_fee(e.id) AS "monthlyFee"
        FROM secretaria.enrollments e
        JOIN secretaria.services sv ON sv.id = e.service_id

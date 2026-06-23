@@ -741,6 +741,31 @@ function Cuaderno({ user }: { user?: any }) {
 }
 
 // ----------------------------- FICHA DE ALUMNO (completa y visual) -----------------------------
+function ApoyoFichaDetail({ enrollmentId }: { enrollmentId: string }) {
+  const DOW = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  const [d, setD] = useState<any>(null);
+  useEffect(() => {
+    let alive = true;
+    api.get(`/apoyo/student/${enrollmentId}`).then(r => { if (alive) setD(r.data); }).catch(() => {});
+    return () => { alive = false; };
+  }, [enrollmentId]);
+  if (!d) return null;
+  const byGroup: Record<string, any[]> = {};
+  for (const a of (d.assignments || [])) { (byGroup[a.groupName] = byGroup[a.groupName] || []).push(a); }
+  return (
+    <div style={{ marginTop: 8, padding: '6px 10px', background: '#FAFAF8', border: '1px solid #EDE9E4', borderRadius: 8, fontSize: 12 }}>
+      <div style={{ marginBottom: 4 }}>
+        <b>Apoyo</b> · Nivel: {d.apoyoLevel ? <Tag>{d.apoyoLevel}</Tag> : <Tag color="red">sin nivel</Tag>}
+        · <b>{Number(d.totalHours)}h</b> · {d.monthly == null ? <Tag color="red">revisar</Tag> : <Tag color="green">{Number(d.monthly).toFixed(2)} €/mes</Tag>}
+      </div>
+      {Object.keys(byGroup).length === 0 && <Text type="secondary">Sin grupo asignado todavía.</Text>}
+      {Object.entries(byGroup).map(([gname, arr]) => (
+        <div key={gname}><b>{gname}:</b> {arr.map(a => `${DOW[a.weekday]} ${a.slotTime} (${Number(a.hours)}h)`).join(', ')}</div>
+      ))}
+    </div>
+  );
+}
+
 const edadDe = (birth?: string) => { if (!birth) return null; const d = new Date(birth); const n = new Date(); let a = n.getFullYear() - d.getFullYear(); if (n.getMonth() < d.getMonth() || (n.getMonth() === d.getMonth() && n.getDate() < d.getDate())) a--; return a; };
 const ENR_COLOR: any = { matriculado: 'green', preinscrito: 'gold', lista_espera: 'orange', pendiente: 'blue', baja: 'red' };
 function FichaAlumno({ studentId, open, onClose }: { studentId?: string; open: boolean; onClose: () => void }) {
@@ -827,6 +852,11 @@ function FichaAlumno({ studentId, open, onClose }: { studentId?: string; open: b
 
         {card('Matrículas', data.enrollments.length ? (
           <Table rowKey="id" size="small" pagination={false} dataSource={data.enrollments}
+            expandable={{
+              expandedRowRender: (m: any) => /apoyo/i.test(m.serviceName || '') ? <ApoyoFichaDetail enrollmentId={m.id} /> : null,
+              rowExpandable: (m: any) => /apoyo/i.test(m.serviceName || ''),
+              showExpandColumn: data.enrollments.some((m: any) => /apoyo/i.test(m.serviceName || '')),
+            }}
             columns={[
               { title: 'Curso', dataIndex: 'yearLabel', render: (y: any, r: any) => <Tag color={r.yearActive ? 'blue' : 'default'}>{y || '—'}{r.yearActive ? ' · actual' : ''}</Tag> },
               { title: 'Servicio', dataIndex: 'serviceName' },

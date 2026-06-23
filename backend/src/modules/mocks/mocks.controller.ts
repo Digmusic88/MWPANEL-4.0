@@ -41,8 +41,9 @@ export class MocksController {
   };
 
   private async resolveTargetLevel(mockUserId: number): Promise<{ code: string; label: string } | null> {
-    const rows = await this.ds.query(
-      `SELECT p.mock_exam_type AS code
+    try {
+      const rows = await this.ds.query(
+        `SELECT p.mock_exam_type AS code
        FROM secretaria.students s
        JOIN secretaria.enrollments e ON e.student_id = s.id AND e.status = 'matriculado'
        JOIN secretaria.groups g ON g.id = e.group_id
@@ -50,11 +51,14 @@ export class MocksController {
        JOIN secretaria.academic_years ay ON ay.id = g.academic_year_id AND ay.is_active = true
        WHERE s.mock_user_id = $1 AND p.mock_exam_type IS NOT NULL
        LIMIT 1`,
-      [mockUserId],
-    );
-    if (!rows.length) return null;
-    const code = rows[0].code as string;
-    return { code, label: this.EXAM_LABELS[code] || code };
+        [mockUserId],
+      );
+      if (!rows.length) return null;
+      const code = rows[0].code as string;
+      return { code, label: this.EXAM_LABELS[code] || code };
+    } catch {
+      return null; // degrada con elegancia si la migración 035 aún no está aplicada
+    }
   }
 
   // Lista de alumnos de Cambridge Mocks (con nº de resultados) + a qué alumno de secretaría están enlazados

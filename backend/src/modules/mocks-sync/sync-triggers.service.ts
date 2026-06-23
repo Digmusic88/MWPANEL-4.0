@@ -10,6 +10,7 @@ export class SyncTriggersService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger('MocksSyncTriggers');
   private client?: Client;
   private debounce?: NodeJS.Timeout;
+  private reconnectTimer?: NodeJS.Timeout;
   private stopped = false;
 
   constructor(private readonly sync: SyncService) {}
@@ -21,35 +22,41 @@ export class SyncTriggersService implements OnModuleInit, OnModuleDestroy {
   onModuleDestroy() {
     this.stopped = true;
     if (this.debounce) clearTimeout(this.debounce);
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.client?.end().catch(() => {});
   }
 
   private async connect() {
     if (this.stopped) return;
-    this.client = new Client({
-      host: process.env.DB_HOST,
+    const client = new Client({
+      host: process.env.DB_HOST || 'mw-panel-db-prod',
       port: Number(process.env.DB_PORT || 5432),
-      user: process.env.DB_USER,
+      user: process.env.DB_USER || 'mwpanel',
       password: process.env.DB_PASS,
-      database: process.env.DB_NAME,
+      database: process.env.DB_NAME || 'mwpanel',
     });
-    this.client.on('notification', (msg) => {
+    this.client = client;
+    client.on('notification', (msg) => {
       try {
         const { t } = JSON.parse(msg.payload || '{}');
         if (SYNC_TABLES.has(t)) this.schedule();
       } catch { /* ignore */ }
     });
-    this.client.on('error', (e) => {
+    client.on('error', (e) => {
       this.log.warn(`pg listen error: ${e.message}; reconectando en 3s`);
-      setTimeout(() => this.connect(), 3000);
+      const old = this.client;
+      this.client = undefined;
+      old?.removeAllListeners();
+      old?.end().catch(() => {});
+      this.reconnectTimer = setTimeout(() => this.connect(), 3000);
     });
     try {
-      await this.client.connect();
-      await this.client.query('LISTEN secretaria_changes');
+      await client.connect();
+      await client.query('LISTEN secretaria_changes');
       this.log.log('escuchando secretaria_changes para sync con Mocks');
     } catch (e: any) {
       this.log.warn(`no se pudo conectar pg listen: ${e.message}; reintento en 3s`);
-      setTimeout(() => this.connect(), 3000);
+      this.reconnectTimer = setTimeout(() => this.connect(), 3000);
     }
   }
 

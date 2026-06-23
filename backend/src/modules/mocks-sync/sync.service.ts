@@ -4,6 +4,8 @@ import { DataSource } from 'typeorm';
 import { buildDesiredState, GroupStudentRow } from './desired-state';
 import { MocksApiClient, ReconcileReport } from './mocks-api.client';
 
+export type ReconcileOutcome = (ReconcileReport & { ok: true }) | { ok: false; skipped: true };
+
 @Injectable()
 export class SyncService {
   private readonly log = new Logger('MocksSync');
@@ -14,10 +16,10 @@ export class SyncService {
     private readonly mocks: MocksApiClient,
   ) {}
 
-  async reconcile(trigger: 'change-feed' | 'cron' | 'manual') {
+  async reconcile(trigger: 'change-feed' | 'cron' | 'manual'): Promise<ReconcileOutcome> {
     if (this.running) {
       this.log.warn(`reconcile(${trigger}) omitido: ya hay uno en curso`);
-      return { ok: false, skipped: true } as any;
+      return { ok: false, skipped: true };
     }
     this.running = true;
     const t0 = Date.now();
@@ -69,7 +71,7 @@ export class SyncService {
       this.log.log(
         `reconcile(${trigger}) ok: +${report.created} alumnos, ${report.enrolled} altas, ${report.unenrolled} bajas, ${report.renamed} renombrados, ${report.incidencias.length} incidencias`,
       );
-      return { ...report, ok: true };
+      return { ...report, ok: true as const };
     } catch (e: any) {
       await this.writeLog(trigger, false, null, String(e?.message || e), Date.now() - t0);
       this.log.error(`reconcile(${trigger}) FALLÓ: ${e?.message || e}`);

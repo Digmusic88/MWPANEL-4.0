@@ -92,8 +92,10 @@ export class ApoyoController {
 
   @Delete('assignment/:id') @Roles('secretaria_admin','secretaria_staff','direccion')
   async remove(@Param('id') id: string) {
-    const rows = await this.ds.query(`DELETE FROM secretaria.apoyo_assignments WHERE id=$1 RETURNING enrollment_id`, [id]);
-    const enr = rows[0]?.enrollment_id;
+    // Capturamos el enrollment ANTES de borrar (RETURNING no es fiable con TypeORM.query en este stack)
+    const pre = await this.ds.query(`SELECT enrollment_id FROM secretaria.apoyo_assignments WHERE id=$1`, [id]);
+    const enr = pre[0]?.enrollment_id;
+    await this.ds.query(`DELETE FROM secretaria.apoyo_assignments WHERE id=$1`, [id]);
     if (enr) {
       const rest = await this.ds.query(`SELECT group_id FROM secretaria.apoyo_assignments WHERE enrollment_id=$1 LIMIT 1`, [enr]);
       await this.ds.query(`UPDATE secretaria.enrollments SET group_id=$2 WHERE id=$1`, [enr, rest[0]?.group_id || null]);

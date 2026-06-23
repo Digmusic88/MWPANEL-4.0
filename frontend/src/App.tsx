@@ -4634,8 +4634,13 @@ function ApoyoBoard() {
             <div style={{ fontWeight: 700, fontFamily: "'Lora',serif", marginBottom: 6 }}>Sin asignar <Tag>{pool.length}</Tag></div>
             {pool.map((s: any) => (
               <div key={s.enrollmentId} style={{ background: '#F5F2ED', border: '1px solid #E2DDD8', borderRadius: 6, padding: '4px 6px', marginBottom: 4 }}>
-                <div draggable onDragStart={() => setDrag({ enrollmentId: s.enrollmentId })} onDragEnd={() => { setDrag(null); setOverKey(null); }}
-                  style={{ cursor: 'grab', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.studentName} {eur(s.monthlyFee)}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 4, alignItems: 'center' }}>
+                  <div draggable onDragStart={() => setDrag({ enrollmentId: s.enrollmentId })} onDragEnd={() => { setDrag(null); setOverKey(null); }}
+                    style={{ cursor: 'grab', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.studentName} {eur(s.monthlyFee)}</div>
+                  <Dropdown trigger={['click']} menu={{ items: [{ key: 'w', label: 'A lista de espera' }], onClick: () => toWaitlist(s.enrollmentId) }}>
+                    <a style={{ color: '#9B9BAB', flexShrink: 0 }} onClick={e => e.preventDefault()}>⋯</a>
+                  </Dropdown>
+                </div>
                 <Select size="small" style={{ width: '100%', marginTop: 2 }} placeholder="Etapa" value={s.apoyoLevel || undefined}
                   options={LEVELS} onChange={(v) => setLevel(s.enrollmentId, v)} />
               </div>

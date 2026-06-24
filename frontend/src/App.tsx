@@ -4665,7 +4665,7 @@ function Organizacion() {
         <Select value={serviceId} onChange={setServiceId} style={{ width: 220 }} options={services.map((s: any) => ({ value: s.id, label: s.name }))} />
         {!isDanza && <Button onClick={load} loading={loading}>Actualizar</Button>}
       </Space>
-      {isDanza ? <DanzaBoard /> : kanban}
+      {isDanza ? <DanzaKanban /> : kanban}
     </div>
   );
 }
@@ -5094,6 +5094,225 @@ function DanzaBoard() {
             ]} />
         </Card>
       </Card>
+      <DanzaTiersModal open={tiersOpen} onClose={() => setTiersOpen(false)} groups={data.groups} />
+      <DanzaDaysModal open={!!daysModal} group={daysModal?.group} student={daysModal?.student} originGroupId={daysModal?.originGroupId ?? null}
+        onClose={() => setDaysModal(null)} onDone={() => { setDaysModal(null); load(); }} />
+      <Modal title={`Asignar a grupo — ${pickGroup?.student?.studentName || ''}`} open={!!pickGroup}
+        onCancel={() => setPickGroup(null)} onOk={confirmPickGroup} okText="Continuar" cancelText="Cancelar"
+        okButtonProps={{ disabled: !pickTargetId }}>
+        <div style={{ marginBottom: 12 }}>
+          <Text>Grupo de destino</Text>
+          <Select style={{ width: '100%', marginTop: 4 }} placeholder="Elige un grupo" value={pickTargetId} onChange={setPickTargetId}
+            options={(data.groups || []).filter((g: any) => g.id !== pickGroup?.fromGroupId).map((g: any) => ({ value: g.id, label: g.name }))} />
+        </div>
+        {pickGroup?.fromGroupId && (
+          <Radio.Group value={pickMode} onChange={e => setPickMode(e.target.value)}>
+            <Space direction="vertical">
+              <Radio value="mover">Mover (quitar del grupo actual)</Radio>
+              <Radio value="anadir">Añadir (mantener también en el grupo actual)</Radio>
+            </Space>
+          </Radio.Group>
+        )}
+        <Paragraph type="secondary" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
+          Después elegirás los días en el grupo de destino.
+        </Paragraph>
+      </Modal>
+    </div>
+  );
+}
+
+// ----------------------------- DANZA (kanban estilo Inglés, embebido en Organización) -----------------------------
+// Misma apariencia que el tablero de Inglés (columnas pastel de ancho fijo con scroll horizontal,
+// «bolsa» fijada a la izquierda, tarjetas por estado, reordenado de columnas) adaptada a Danza:
+// un alumno puede estar en varios grupos con DÍAS concretos, sin capacidad/programa/profesor.
+function DanzaKanban() {
+  const q = useSearch();
+  const DOW = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  const [years, setYears] = useState<any[]>([]);
+  const [data, setData] = useState<any>({ groups: [], students: [] });
+  const [loading, setLoading] = useState(false);
+  const [tiersOpen, setTiersOpen] = useState(false);
+  const [drag, setDrag] = useState<{ enrollmentId: string; fromGroupId: string | null } | null>(null);
+  const [dragCol, setDragCol] = useState<string | null>(null);
+  const [overCol, setOverCol] = useState<string | null>(null);
+  const [daysModal, setDaysModal] = useState<{ group: any; student: any; originGroupId: string | null } | null>(null);
+  const [pickGroup, setPickGroup] = useState<{ student: any; fromGroupId: string | null } | null>(null);
+  const [pickTargetId, setPickTargetId] = useState<string | undefined>();
+  const [pickMode, setPickMode] = useState<'mover' | 'anadir'>('mover');
+  const activeYear = () => years.find(y => y.isActive);
+  const load = async () => {
+    const y = activeYear(); if (!y) return;
+    setLoading(true);
+    try { const { data } = await api.get('/danza/board', { params: { academicYearId: y.id } }); setData(data); } catch {} finally { setLoading(false); }
+  };
+  useEffect(() => { api.get('/catalog/years').then(r => setYears(r.data)); }, []);
+  useEffect(() => { if (years.length) load(); }, [years]);
+  useLiveQuery(['enrollments', 'groups', 'danza'], load);
+
+  const setStatus = async (enrollmentId: string, status: string) => { try { await api.patch(`/enrollments/${enrollmentId}`, { status }); load(); } catch { message.error('Error'); } };
+  const setComment = async (s: any) => { const c = window.prompt('Comentario sobre ' + s.studentName + ':', s.comment || ''); if (c === null) return; try { await api.patch(`/enrollments/${s.enrollmentId}`, { notes: c }); load(); } catch { message.error('Error'); } };
+  const quitarGrupo = async (enrollmentId: string, groupId: string) => { try { await api.delete('/danza/assignments', { params: { enrollmentId, groupId } }); load(); } catch { message.error('Error'); } };
+  const openDays = (group: any, student: any, originGroupId: string | null) => setDaysModal({ group, student, originGroupId });
+  const openPickGroup = (s: any, fromGroupId: string | null) => { setPickTargetId(undefined); setPickMode('mover'); setPickGroup({ student: s, fromGroupId }); };
+  const confirmPickGroup = () => {
+    if (!pickGroup || !pickTargetId) return;
+    const target = (data.groups || []).find((g: any) => g.id === pickTargetId);
+    if (!target) return;
+    const origin = pickGroup.fromGroupId && pickMode === 'mover' ? pickGroup.fromGroupId : null;
+    const student = pickGroup.student;
+    setPickGroup(null);
+    openDays(target, student, origin);
+  };
+  // Reordenar columnas arrastrando la cabecera (usa el endpoint genérico de grupos, como Inglés).
+  const reorderTo = async (targetGroupId: string | null) => {
+    if (!dragCol || dragCol === targetGroupId) return;
+    const ids = data.groups.map((g: any) => g.id);
+    const from = ids.indexOf(dragCol); if (from < 0) return;
+    ids.splice(from, 1);
+    const to = targetGroupId ? ids.indexOf(targetGroupId) : 0;
+    ids.splice(to < 0 ? ids.length : to, 0, dragCol);
+    const map: any = Object.fromEntries(data.groups.map((g: any) => [g.id, g]));
+    setData((d: any) => ({ ...d, groups: ids.map((id: string) => map[id]) }));
+    try { await api.post('/catalog/groups/reorder', { ids }); } catch { message.error('No se pudo reordenar'); load(); }
+  };
+
+  const matches = (s: any) => matchesText(s, q);
+  const bolsa = (data.students || []).filter((s: any) => (s.totalDays || 0) === 0 && matches(s));
+  const inGroup = (g: any) => (data.students || []).filter((s: any) => (s.assignments || []).some((a: any) => a.groupId === g.id) && matches(s));
+  const daysOf = (s: any, g: any) => (s.assignments || []).filter((a: any) => a.groupId === g.id).map((a: any) => `${DOW[a.weekday]} ${a.startTime}`).join(', ');
+  const fmtDanzaSlots = (sched: any[]) => (sched && sched.length) ? sched.map((sl: any) => `${DOW[sl.weekday]} ${sl.startTime}`).join(' · ') : 'Sin horario';
+
+  // Render de una columna (vale para la «bolsa» con g._pool y para cada grupo).
+  const renderColumn = (g: any) => {
+    const isPool = g._pool;
+    const list = isPool ? bolsa : inGroup(g);
+    const nonWait = list.filter((s: any) => s.status !== 'lista_espera');
+    const wait = list.filter((s: any) => s.status === 'lista_espera');
+    const isOver = overCol === String(g.id);
+    const gColor = isPool ? null : effGroupColor(g.color, g.name, undefined);
+    const colBg = isPool ? '#ece1fb' : (pastel(gColor, 0.85) || '#fff');
+    const cardMenu = (s: any) => ({
+      items: [
+        { key: 'comment', label: s.comment ? 'Editar comentario' : 'Añadir comentario' },
+        { key: 'assignGroup', label: isPool ? 'Asignar a grupo…' : 'Mover / asignar a otro grupo…' },
+        ...(isPool ? [] : [{ key: 'days', label: 'Editar días' }, { key: 'quit', label: 'Quitar del grupo' }]),
+        { type: 'divider' as const },
+        { key: 'st_matriculado', label: '✓ Matricular' },
+        { key: 'st_preinscrito', label: 'Marcar preinscrito' },
+        { key: 'st_lista_espera', label: 'A lista de espera' },
+      ],
+      onClick: ({ key }: any) => {
+        if (key === 'comment') setComment(s);
+        else if (key === 'assignGroup') openPickGroup(s, isPool ? null : g.id);
+        else if (key === 'days') openDays(g, s, null);
+        else if (key === 'quit') quitarGrupo(s.enrollmentId, g.id);
+        else if (key.startsWith('st_')) setStatus(s.enrollmentId, key.slice(3));
+      },
+    });
+    const renderCard = (s: any) => {
+      const stat = orgStat(s.status);
+      return (
+        <div key={s.enrollmentId + (isPool ? ':pool' : ':' + g.id)} draggable
+          onDragStart={() => setDrag({ enrollmentId: s.enrollmentId, fromGroupId: isPool ? null : g.id })}
+          onDragEnd={() => { setDrag(null); setOverCol(null); }}
+          title={stat.label}
+          style={{
+            background: drag?.enrollmentId === s.enrollmentId ? '#EEF5FA' : stat.bg, border: `1px solid ${stat.border}`,
+            borderRadius: 6, padding: '4px 6px', fontSize: 12, cursor: 'grab',
+          }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+              {stat.tick ? <span style={{ color: '#2E7D52', fontWeight: 700, marginRight: 4 }}>✓</span> : null}
+              {s.comment ? <Tooltip title={s.comment}><span style={{ cursor: 'help', marginRight: 4 }}>💬</span></Tooltip> : null}
+              {s.studentName}
+            </span>
+            <Dropdown menu={cardMenu(s)} trigger={['click']}>
+              <a style={{ color: '#6B6B7B', fontSize: 16, lineHeight: 1, flexShrink: 0 }} onClick={(e) => e.preventDefault()}>⋯</a>
+            </Dropdown>
+          </div>
+          {!isPool && <div style={{ color: '#6B6B7B', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{daysOf(s, g) || '(sin días)'}</div>}
+        </div>
+      );
+    };
+    return (
+      <div key={String(g.id)}
+        onDragOver={(e) => { e.preventDefault(); setOverCol(String(g.id)); }}
+        onDragLeave={() => setOverCol(null)}
+        onDrop={() => {
+          if (!isPool) {
+            if (dragCol) reorderTo(g.id);
+            else if (drag) { const s = data.students.find((x: any) => x.enrollmentId === drag.enrollmentId); if (s) openDays(g, s, drag.fromGroupId); }
+          }
+          setDrag(null); setDragCol(null); setOverCol(null);
+        }}
+        style={{
+          minWidth: 168, maxWidth: 168, flexShrink: 0, background: colBg,
+          border: isOver ? '2px dashed #579172' : '1px solid #E2DDD8',
+          borderTop: gColor ? `3px solid ${gColor}` : undefined,
+          borderRadius: 10, padding: 8, alignSelf: 'stretch', opacity: dragCol === g.id ? 0.5 : 1,
+          ...(isPool ? { overflowY: 'auto' as const, boxShadow: '6px 0 12px -2px rgba(0,0,0,0.18)' } : {}),
+        }}>
+        <div style={{
+            position: 'sticky', top: 0, zIndex: 2, background: colBg,
+            marginTop: -8, marginLeft: -8, marginRight: -8, padding: '8px 8px 6px', marginBottom: 8,
+            borderRadius: '9px 9px 0 0', boxShadow: '0 4px 6px -4px rgba(0,0,0,0.28)',
+          }}
+          draggable={!isPool}
+          onDragStart={!isPool ? ((e) => { e.stopPropagation(); setDragCol(g.id); }) : undefined}
+          onDragEnd={() => { setDragCol(null); setOverCol(null); }}>
+          <div style={{ fontWeight: 700, fontFamily: "'Lora', serif", fontSize: 13.5, lineHeight: 1.2, cursor: isPool ? 'default' : 'move' }}>
+            {!isPool && <span style={{ color: '#9B9BAB', marginRight: 4 }} title="Arrastra para reordenar">⠿</span>}
+            {g.name}{' '}
+            <Tag style={{ marginLeft: 4 }}>{list.length}</Tag>
+            {!isPool && g.billsMaillot ? <Tag color="purple">maillot</Tag> : null}
+          </div>
+          {!isPool
+            ? <div style={{ fontSize: 11, color: '#6B6B7B' }}>
+                {g.room ? <div>🏫 {g.room}</div> : null}
+                <div>{fmtDanzaSlots(g.schedule)}</div>
+              </div>
+            : <div style={{ fontSize: 11, color: '#722ed1' }}>Alumnos de Danza sin días. Arrástralos a un grupo (te preguntará a qué días viene).</div>}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minHeight: 40 }}>
+          {nonWait.map(renderCard)}
+          {wait.length > 0 && (
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#b45309', borderTop: '1px dashed #f0c078', marginTop: 2, paddingTop: 4 }}>
+              Lista de espera ({wait.length})
+            </div>
+          )}
+          {wait.map(renderCard)}
+          {list.length === 0 && <Text type="secondary" style={{ fontSize: 12 }}>{isPool ? 'Todos asignados' : (g.schedule || []).length === 0 ? 'Sin franjas — defínelas en Horarios' : '—'}</Text>}
+        </div>
+      </div>
+    );
+  };
+
+  const kanban = (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', maxHeight: '72vh' }}>
+      {renderColumn({ id: null, _pool: true, name: 'Sin asignar' })}
+      <div style={{ overflow: 'auto', flex: 1, minWidth: 0 }}>
+        {data.groups.length === 0 && !loading
+          ? <Empty description="No hay grupos de Danza. Créalos en Grupos." />
+          : <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', width: 'max-content', paddingBottom: 8 }}>
+              {data.groups.map(renderColumn)}
+            </div>}
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <Ayuda title="Tablero de Danza por días (arrastra alumnos)">
+        Mismo tablero que Inglés, adaptado a Danza: un alumno puede estar en <b>varios grupos</b> con <b>días</b> distintos.
+        La columna <b>«Sin asignar»</b> (izquierda) son los alumnos sin días. <b>Arrastra</b> un alumno a un grupo (o usa el menú <b>⋯ → Asignar</b>) y elige los <b>días</b>.
+        Cada tarjeta muestra los <b>días</b> del alumno en ese grupo. La <b>mensualidad</b> sale del total de días (tramos) y el <b>maillot</b> si el grupo lo cobra.
+        Reordena las columnas arrastrando la cabecera (icono ⠿).
+      </Ayuda>
+      <Space wrap style={{ marginBottom: 12 }}>
+        <Button onClick={load} loading={loading}>Actualizar</Button>
+        <Button onClick={() => setTiersOpen(true)}>Tramos de tarifa</Button>
+      </Space>
+      {kanban}
       <DanzaTiersModal open={tiersOpen} onClose={() => setTiersOpen(false)} groups={data.groups} />
       <DanzaDaysModal open={!!daysModal} group={daysModal?.group} student={daysModal?.student} originGroupId={daysModal?.originGroupId ?? null}
         onClose={() => setDaysModal(null)} onDone={() => { setDaysModal(null); load(); }} />

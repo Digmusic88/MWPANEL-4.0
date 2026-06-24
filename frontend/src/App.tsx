@@ -5179,18 +5179,27 @@ function DanzaKanban() {
   const matches = (s: any) => matchesText(s, q);
   const bolsa = (data.students || []).filter((s: any) => (s.totalDays || 0) === 0 && matches(s));
   const inGroup = (g: any) => (data.students || []).filter((s: any) => (s.assignments || []).some((a: any) => a.groupId === g.id) && matches(s));
-  const daysOf = (s: any, g: any) => (s.assignments || []).filter((a: any) => a.groupId === g.id).map((a: any) => `${DOW[a.weekday]} ${a.startTime}`).join(', ');
-  const fmtDanzaSlots = (sched: any[]) => (sched && sched.length) ? sched.map((sl: any) => `${DOW[sl.weekday]} ${sl.startTime}`).join(' · ') : 'Sin horario';
 
   // Render de una columna (vale para la «bolsa» con g._pool y para cada grupo).
+  // Franjas (día/hora) de un grupo: las definidas en su horario + las que aparezcan en las asignaciones
+  // (por si hubiera asignaciones a una franja ya retirada del horario), para no perder a ningún alumno.
+  const slotKey = (wd: number, t: string) => `${wd}|${t}`;
+  const groupSlots = (g: any, students: any[]) => {
+    const m = new Map<string, any>();
+    for (const sl of (g.schedule || [])) m.set(slotKey(sl.weekday, sl.startTime), { weekday: sl.weekday, startTime: sl.startTime, room: sl.room });
+    for (const s of students) for (const a of (s.assignments || [])) if (a.groupId === g.id && !m.has(slotKey(a.weekday, a.startTime))) m.set(slotKey(a.weekday, a.startTime), { weekday: a.weekday, startTime: a.startTime, room: a.room });
+    return Array.from(m.values()).sort((x, y) => x.weekday - y.weekday || String(x.startTime).localeCompare(String(y.startTime)));
+  };
+  const studentsInSlot = (g: any, slot: any, students: any[]) =>
+    students.filter((s: any) => (s.assignments || []).some((a: any) => a.groupId === g.id && a.weekday === slot.weekday && a.startTime === slot.startTime));
+
   const renderColumn = (g: any) => {
     const isPool = g._pool;
     const list = isPool ? bolsa : inGroup(g);
-    const nonWait = list.filter((s: any) => s.status !== 'lista_espera');
-    const wait = list.filter((s: any) => s.status === 'lista_espera');
     const isOver = overCol === String(g.id);
     const gColor = isPool ? null : effGroupColor(g.color, g.name, undefined);
     const colBg = isPool ? '#ece1fb' : (pastel(gColor, 0.85) || '#fff');
+    const slots = isPool ? [] : groupSlots(g, list);
     const cardMenu = (s: any) => ({
       items: [
         { key: 'comment', label: s.comment ? 'Editar comentario' : 'Añadir comentario' },
@@ -5209,10 +5218,11 @@ function DanzaKanban() {
         else if (key.startsWith('st_')) setStatus(s.enrollmentId, key.slice(3));
       },
     });
-    const renderCard = (s: any) => {
+    // suffix asegura claves únicas cuando un alumno aparece en varias sub-columnas (varios días) del mismo grupo.
+    const renderCard = (s: any, suffix = '') => {
       const stat = orgStat(s.status);
       return (
-        <div key={s.enrollmentId + (isPool ? ':pool' : ':' + g.id)} draggable
+        <div key={s.enrollmentId + ':' + (isPool ? 'pool' : g.id) + (suffix ? ':' + suffix : '')} draggable
           onDragStart={() => setDrag({ enrollmentId: s.enrollmentId, fromGroupId: isPool ? null : g.id })}
           onDragEnd={() => { setDrag(null); setOverCol(null); }}
           title={stat.label}
@@ -5230,7 +5240,23 @@ function DanzaKanban() {
               <a style={{ color: '#6B6B7B', fontSize: 16, lineHeight: 1, flexShrink: 0 }} onClick={(e) => e.preventDefault()}>⋯</a>
             </Dropdown>
           </div>
-          {!isPool && <div style={{ color: '#6B6B7B', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{daysOf(s, g) || '(sin días)'}</div>}
+        </div>
+      );
+    };
+    // Lista de alumnos (matriculados arriba, lista de espera abajo) — reutilizada por la bolsa y por cada sub-columna.
+    const renderList = (arr: any[], suffix: string, emptyTxt: string) => {
+      const nonWait = arr.filter((s: any) => s.status !== 'lista_espera');
+      const wait = arr.filter((s: any) => s.status === 'lista_espera');
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minHeight: 30 }}>
+          {nonWait.map((s: any) => renderCard(s, suffix))}
+          {wait.length > 0 && (
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#b45309', borderTop: '1px dashed #f0c078', marginTop: 2, paddingTop: 4 }}>
+              Lista de espera ({wait.length})
+            </div>
+          )}
+          {wait.map((s: any) => renderCard(s, suffix))}
+          {arr.length === 0 && <Text type="secondary" style={{ fontSize: 11 }}>{emptyTxt}</Text>}
         </div>
       );
     };
@@ -5246,7 +5272,7 @@ function DanzaKanban() {
           setDrag(null); setDragCol(null); setOverCol(null);
         }}
         style={{
-          minWidth: 168, maxWidth: 168, flexShrink: 0, background: colBg,
+          minWidth: 168, ...(isPool ? { maxWidth: 168 } : {}), flexShrink: 0, background: colBg,
           border: isOver ? '2px dashed #579172' : '1px solid #E2DDD8',
           borderTop: gColor ? `3px solid ${gColor}` : undefined,
           borderRadius: 10, padding: 8, alignSelf: 'stretch', opacity: dragCol === g.id ? 0.5 : 1,
@@ -5263,26 +5289,32 @@ function DanzaKanban() {
           <div style={{ fontWeight: 700, fontFamily: "'Lora', serif", fontSize: 13.5, lineHeight: 1.2, cursor: isPool ? 'default' : 'move' }}>
             {!isPool && <span style={{ color: '#9B9BAB', marginRight: 4 }} title="Arrastra para reordenar">⠿</span>}
             {g.name}{' '}
-            <Tag style={{ marginLeft: 4 }}>{list.length}</Tag>
+            <Tag style={{ marginLeft: 4 }} title="Total de alumnos en el grupo">{list.length}</Tag>
             {!isPool && g.billsMaillot ? <Tag color="purple">maillot</Tag> : null}
           </div>
           {!isPool
-            ? <div style={{ fontSize: 11, color: '#6B6B7B' }}>
-                {g.room ? <div>🏫 {g.room}</div> : null}
-                <div>{fmtDanzaSlots(g.schedule)}</div>
-              </div>
+            ? <div style={{ fontSize: 11, color: '#6B6B7B' }}>{g.room ? <span>🏫 {g.room}</span> : null}</div>
             : <div style={{ fontSize: 11, color: '#722ed1' }}>Alumnos de Danza sin días. Arrástralos a un grupo (te preguntará a qué días viene).</div>}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minHeight: 40 }}>
-          {nonWait.map(renderCard)}
-          {wait.length > 0 && (
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#b45309', borderTop: '1px dashed #f0c078', marginTop: 2, paddingTop: 4 }}>
-              Lista de espera ({wait.length})
-            </div>
-          )}
-          {wait.map(renderCard)}
-          {list.length === 0 && <Text type="secondary" style={{ fontSize: 12 }}>{isPool ? 'Todos asignados' : (g.schedule || []).length === 0 ? 'Sin franjas — defínelas en Horarios' : '—'}</Text>}
-        </div>
+        {isPool
+          ? renderList(list, '', 'Todos asignados')
+          : slots.length === 0
+            ? <Text type="secondary" style={{ fontSize: 12 }}>Sin franjas — defínelas en Horarios</Text>
+            : <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                {slots.map((slot: any) => {
+                  const ss = studentsInSlot(g, slot, list);
+                  const sk = slotKey(slot.weekday, slot.startTime);
+                  return (
+                    <div key={sk} style={{ width: 152, flexShrink: 0, background: 'rgba(255,255,255,0.55)', border: '1px solid #E2DDD8', borderRadius: 8, padding: 6 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#4B4B5B', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4 }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{DOW[slot.weekday]} {slot.startTime}{slot.room ? ` · ${slot.room}` : ''}</span>
+                        <Tag style={{ margin: 0 }} title="Alumnos en esta franja">{ss.length}</Tag>
+                      </div>
+                      {renderList(ss, sk, '—')}
+                    </div>
+                  );
+                })}
+              </div>}
       </div>
     );
   };

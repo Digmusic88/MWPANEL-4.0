@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cellKey, isCellSelectable, buildBulkCells, countSelectedStudents, SelectedCell } from './payments-bulk.ts';
+import type { SelectedCell } from './payments-bulk.ts';
+import { cellKey, isCellSelectable, buildBulkCells, countSelectedStudents } from './payments-bulk.ts';
 
 test('cellKey combina enrollmentId y colKey', () => {
   assert.equal(cellKey('e1', '2026-09'), 'e1:2026-09');

@@ -7,10 +7,6 @@ export interface SelectedCell {
   studentName: string;
   label: string;
 }
-// Runtime anchor: node --experimental-strip-types needs a JS value for named imports.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const SelectedCell = undefined as unknown as SelectedCell;
-
 // Clave única de una celda en la matriz: alumno + clave de columna (period o concepto).
 export function cellKey(enrollmentId: string, colKey: string): string {
   return `${enrollmentId}:${colKey}`;

@@ -1,5 +1,7 @@
 import { Controller, Get, Post, Body, UseGuards, Query } from '@nestjs/common';
-import { IsString, IsOptional, IsUUID, IsNumber, IsIn, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsUUID, IsNumber, IsIn, IsBoolean, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { dedupeCells, summarizeBulkOutcomes } from './payments.bulk';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { SecretariaAuthGuard, Roles } from '../../common/secretaria-auth.guard';
@@ -28,6 +30,20 @@ class PayCellDto {
   @IsOptional() @IsIn(METHODS) method?: string;
   @IsOptional() @IsString() paidAt?: string;
   @IsOptional() @IsNumber() amount?: number;
+  @IsOptional() @IsBoolean() exempt?: boolean;
+}
+
+// Cobro masivo: lista de celdas + método/fecha comunes; el importe se auto-resuelve por celda.
+class BulkCellTargetDto {
+  @IsUUID() enrollmentId: string;
+  @IsIn(['matricula','material','mensualidad']) concept: string;
+  @IsOptional() @IsString() period?: string;
+  @IsOptional() @IsString() mm?: string;
+}
+class PayCellsBulkDto {
+  @IsArray() @ValidateNested({ each: true }) @Type(() => BulkCellTargetDto) cells: BulkCellTargetDto[];
+  @IsOptional() @IsIn(METHODS) method?: string;
+  @IsOptional() @IsString() paidAt?: string;
   @IsOptional() @IsBoolean() exempt?: boolean;
 }
 
@@ -227,33 +243,34 @@ export class PaymentsController {
     return { ok: true, paymentId: pay[0].id, promoted };
   }
 
-  // Cobro directo de una celda de la matriz: crea el recibo si no existe y lo marca pagado
-  // (o exento). Resuelve el importe por tarifa si no se indica. Pensado para cobrar meses
-  // por adelantado sin generar pendientes a todo el mundo (no genera falsa morosidad).
-  @Post('pay-cell') @Roles('secretaria_admin','secretaria_staff')
-  async payCell(@Body() b: PayCellDto) {
-    const period = b.concept === 'mensualidad' ? (b.period || null) : null;
-    const er = await this.ds.query(
+  // Lógica de cobro de UNA celda, reutilizable por pay-cell y pay-cells-bulk.
+  // `q` es cualquier ejecutor con .query (DataSource o QueryRunner) → permite usarla en transacción.
+  private async applyCellPayment(
+    q: { query: (sql: string, params?: any[]) => Promise<any> },
+    p: { enrollmentId: string; concept: string; period?: string | null; mm?: string | null; method?: string; paidAt?: string; amount?: number; exempt?: boolean },
+  ): Promise<{ ok: boolean; chargeId?: string; promoted: boolean; outcome: 'paid' | 'exempted' | 'skipped' | 'notfound' }> {
+    const period = p.concept === 'mensualidad' ? (p.period || null) : null;
+    const er = await q.query(
       `SELECT e.status AS "enrStatus", st.family_id AS "familyId"
-       FROM secretaria.enrollments e JOIN secretaria.students st ON st.id=e.student_id WHERE e.id=$1`, [b.enrollmentId]);
-    if (!er[0]) return { ok: false, error: 'Matrícula no encontrada' };
+       FROM secretaria.enrollments e JOIN secretaria.students st ON st.id=e.student_id WHERE e.id=$1`, [p.enrollmentId]);
+    if (!er[0]) return { ok: false, promoted: false, outcome: 'notfound' };
 
     // ¿ya existe recibo para esta celda?
-    const ex = await this.ds.query(
+    const ex = await q.query(
       `SELECT id, status FROM secretaria.charges
        WHERE enrollment_id=$1 AND concept=$2::secretaria.fee_concept
          AND ((period IS NULL AND $3::text IS NULL) OR period=$3) LIMIT 1`,
-      [b.enrollmentId, b.concept, period]);
+      [p.enrollmentId, p.concept, period]);
 
     // importe: el indicado o el resuelto por tarifa (servicio/programa/grupo)
-    let amount = b.amount;
+    let amount = p.amount;
     if (amount == null) {
-      if (b.concept === 'mensualidad') {
-        const mm = b.mm || (period ? period.slice(5, 7) : null);
-        const r = await this.ds.query(`SELECT secretaria.fn_resolve_month_amount($1,$2) AS a`, [b.enrollmentId, mm]);
+      if (p.concept === 'mensualidad') {
+        const mm = p.mm || (period ? period.slice(5, 7) : null);
+        const r = await q.query(`SELECT secretaria.fn_resolve_month_amount($1,$2) AS a`, [p.enrollmentId, mm]);
         amount = Number(r[0]?.a) || 0;
       } else {
-        const r = await this.ds.query(`SELECT secretaria.fn_resolve_concept_fee($1,$2) AS a`, [b.enrollmentId, b.concept]);
+        const r = await q.query(`SELECT secretaria.fn_resolve_concept_fee($1,$2) AS a`, [p.enrollmentId, p.concept]);
         amount = Number(r[0]?.a) || 0;
       }
     }
@@ -261,34 +278,75 @@ export class PaymentsController {
     // crear el recibo si no existía
     let chargeId = ex[0]?.id;
     if (!chargeId) {
-      const ins = await this.ds.query(
+      const ins = await q.query(
         `INSERT INTO secretaria.charges(enrollment_id, period, concept, amount_due, status)
          VALUES ($1,$2,$3::secretaria.fee_concept,$4,'pendiente') RETURNING id`,
-        [b.enrollmentId, period, b.concept, amount]);
+        [p.enrollmentId, period, p.concept, amount]);
       chargeId = ins[0].id;
     }
 
-    if (b.exempt) {
-      await this.ds.query(`UPDATE secretaria.charges SET status='exento' WHERE id=$1`, [chargeId]);
+    let outcome: 'paid' | 'exempted' | 'skipped';
+    if (p.exempt) {
+      await q.query(`UPDATE secretaria.charges SET status='exento' WHERE id=$1`, [chargeId]);
+      outcome = 'exempted';
     } else if (ex[0]?.status !== 'pagado') {
-      const paidAt = b.paidAt || new Date().toISOString().slice(0, 10);
-      const pay = await this.ds.query(
+      const paidAt = p.paidAt || new Date().toISOString().slice(0, 10);
+      const pay = await q.query(
         `INSERT INTO secretaria.payments(family_id, amount, paid_at, method) VALUES ($1,$2,$3,$4) RETURNING id`,
-        [er[0].familyId, amount, paidAt, b.method || 'efectivo']);
-      await this.ds.query(`INSERT INTO secretaria.payment_allocations(payment_id, charge_id, amount) VALUES ($1,$2,$3)`,
+        [er[0].familyId, amount, paidAt, p.method || 'efectivo']);
+      await q.query(`INSERT INTO secretaria.payment_allocations(payment_id, charge_id, amount) VALUES ($1,$2,$3)`,
         [pay[0].id, chargeId, amount]);
-      await this.ds.query(`UPDATE secretaria.charges SET status='pagado' WHERE id=$1`, [chargeId]);
+      await q.query(`UPDATE secretaria.charges SET status='pagado' WHERE id=$1`, [chargeId]);
+      outcome = 'paid';
+    } else {
+      outcome = 'skipped'; // ya estaba pagado
     }
 
     // Reserva de plaza: al pagar/eximir la MATRÍCULA, un preinscrito pasa a matriculado.
     let promoted = false;
-    if (b.concept === 'matricula' && er[0].enrStatus === 'preinscrito') {
-      await this.ds.query(
+    if (p.concept === 'matricula' && er[0].enrStatus === 'preinscrito') {
+      await q.query(
         `UPDATE secretaria.enrollments SET status='matriculado', enrolled_at=now(), status_changed_at=now()
-         WHERE id=$1 AND status='preinscrito'`, [b.enrollmentId]);
+         WHERE id=$1 AND status='preinscrito'`, [p.enrollmentId]);
       promoted = true;
     }
-    return { ok: true, chargeId, promoted };
+    return { ok: true, chargeId, promoted, outcome };
+  }
+
+  // Cobro directo de una celda de la matriz: crea el recibo si no existe y lo marca pagado (o exento).
+  @Post('pay-cell') @Roles('secretaria_admin','secretaria_staff')
+  async payCell(@Body() b: PayCellDto) {
+    const r = await this.applyCellPayment(this.ds, b);
+    if (!r.ok) return { ok: false, error: 'Matrícula no encontrada' };
+    return { ok: true, chargeId: r.chargeId, promoted: r.promoted };
+  }
+
+  // Cobro/exención MASIVOS de varias celdas en una sola transacción. Importe auto por celda.
+  @Post('pay-cells-bulk') @Roles('secretaria_admin','secretaria_staff')
+  async payCellsBulk(@Body() b: PayCellsBulkDto) {
+    const cells = dedupeCells(b.cells || []);
+    const qr = this.ds.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+    const outcomes: string[] = [];
+    let promoted = 0;
+    try {
+      for (const c of cells) {
+        const r = await this.applyCellPayment(qr, {
+          enrollmentId: c.enrollmentId, concept: c.concept, period: c.period, mm: c.mm,
+          method: b.method, paidAt: b.paidAt, exempt: b.exempt,
+        });
+        outcomes.push(r.outcome);
+        if (r.promoted) promoted++;
+      }
+      await qr.commitTransaction();
+    } catch (e) {
+      await qr.rollbackTransaction();
+      throw e;
+    } finally {
+      await qr.release();
+    }
+    return { ok: true, ...summarizeBulkOutcomes(outcomes), promoted };
   }
 
   // Marcar un recibo como exento (gris "x" del Excel)

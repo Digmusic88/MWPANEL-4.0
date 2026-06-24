@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo, createContext, useContext } from 'react';
 import {
   Layout, Menu, Button, Form, Input, Card, Typography, message, Alert, Table, Modal,
-  Select, InputNumber, Tag, Space, Tooltip, Statistic, Row, Col, Popconfirm, Switch, Checkbox, Dropdown, Empty, Progress, Drawer, Calendar, Badge, Grid, Tabs,
+  Select, InputNumber, Tag, Space, Tooltip, Statistic, Row, Col, Popconfirm, Switch, Checkbox, Dropdown, Empty, Progress, Drawer, Calendar, Badge, Grid, Tabs, Radio,
 } from 'antd';
 import {
   DashboardOutlined, TeamOutlined, UserAddOutlined, EuroOutlined, LogoutOutlined,
@@ -4949,6 +4949,22 @@ function DanzaBoard() {
     try { await api.delete('/danza/assignments', { params: { enrollmentId, groupId } }); load(); } catch { message.error('Error'); }
   };
   const openDays = (group: any, student: any, originGroupId: string | null) => setDaysModal({ group, student, originGroupId });
+  // Asignar/mover a un grupo eligiéndolo en un desplegable (alternativa a arrastrar cuando las columnas
+  // están demasiado separadas para soltar físicamente). Reutiliza openDays para escoger los días.
+  const [pickGroup, setPickGroup] = useState<{ student: any; fromGroupId: string | null } | null>(null);
+  const [pickTargetId, setPickTargetId] = useState<string | undefined>();
+  const [pickMode, setPickMode] = useState<'mover' | 'anadir'>('mover');
+  const openPickGroup = (s: any, fromGroupId: string | null) => { setPickTargetId(undefined); setPickMode('mover'); setPickGroup({ student: s, fromGroupId }); };
+  const confirmPickGroup = () => {
+    if (!pickGroup || !pickTargetId) return;
+    const target = (data.groups || []).find((g: any) => g.id === pickTargetId);
+    if (!target) return;
+    // Mover sólo tiene sentido si ya está en un grupo; desde la bolsa o con "Añadir" no hay origen que quitar.
+    const origin = pickGroup.fromGroupId && pickMode === 'mover' ? pickGroup.fromGroupId : null;
+    const student = pickGroup.student;
+    setPickGroup(null);
+    openDays(target, student, origin);
+  };
 
   const bolsa = (data.students || []).filter((s: any) => (s.totalDays || 0) === 0);
   const inGroup = (g: any) => (data.students || []).filter((s: any) => (s.assignments || []).some((a: any) => a.groupId === g.id));
@@ -4959,6 +4975,7 @@ function DanzaBoard() {
     const menu = {
       items: [
         { key: 'comment', label: s.comment ? 'Editar comentario' : 'Añadir comentario' },
+        { key: 'assignGroup', label: g ? 'Mover / asignar a otro grupo…' : 'Asignar a grupo…' },
         ...(g ? [{ key: 'days', label: 'Editar días' }, { key: 'quit', label: 'Quitar del grupo' }] : []),
         { type: 'divider' as const },
         { key: 'st_matriculado', label: '✓ Matricular' },
@@ -4967,6 +4984,7 @@ function DanzaBoard() {
       ],
       onClick: ({ key }: any) => {
         if (key === 'comment') setComment(s);
+        else if (key === 'assignGroup') openPickGroup(s, g ? g.id : null);
         else if (key === 'days' && g) openDays(g, s, null);
         else if (key === 'quit' && g) quitarGrupo(s.enrollmentId, g.id);
         else if (key.startsWith('st_')) setStatus(s.enrollmentId, key.slice(3));
@@ -5043,6 +5061,26 @@ function DanzaBoard() {
       <DanzaTiersModal open={tiersOpen} onClose={() => setTiersOpen(false)} groups={data.groups} />
       <DanzaDaysModal open={!!daysModal} group={daysModal?.group} student={daysModal?.student} originGroupId={daysModal?.originGroupId ?? null}
         onClose={() => setDaysModal(null)} onDone={() => { setDaysModal(null); load(); }} />
+      <Modal title={`Asignar a grupo — ${pickGroup?.student?.studentName || ''}`} open={!!pickGroup}
+        onCancel={() => setPickGroup(null)} onOk={confirmPickGroup} okText="Continuar" cancelText="Cancelar"
+        okButtonProps={{ disabled: !pickTargetId }}>
+        <div style={{ marginBottom: 12 }}>
+          <Text>Grupo de destino</Text>
+          <Select style={{ width: '100%', marginTop: 4 }} placeholder="Elige un grupo" value={pickTargetId} onChange={setPickTargetId}
+            options={(data.groups || []).filter((g: any) => g.id !== pickGroup?.fromGroupId).map((g: any) => ({ value: g.id, label: g.name }))} />
+        </div>
+        {pickGroup?.fromGroupId && (
+          <Radio.Group value={pickMode} onChange={e => setPickMode(e.target.value)}>
+            <Space direction="vertical">
+              <Radio value="mover">Mover (quitar del grupo actual)</Radio>
+              <Radio value="anadir">Añadir (mantener también en el grupo actual)</Radio>
+            </Space>
+          </Radio.Group>
+        )}
+        <Paragraph type="secondary" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
+          Después elegirás los días en el grupo de destino.
+        </Paragraph>
+      </Modal>
     </div>
   );
 }

@@ -10,6 +10,8 @@ import {
   SyncOutlined,
 } from '@ant-design/icons';
 import { api, setToken, clearToken, getToken, beginImpersonation, endImpersonation, isImpersonating } from './api';
+import { cellKey, isCellSelectable, buildBulkCells, countSelectedStudents } from './payments-bulk';
+import type { SelectedCell } from './payments-bulk';
 import { InscripcionDrawer } from './components/InscripcionDrawer';
 import { useLiveQuery } from './realtime/useLiveQuery';
 import { useRoomPresence } from './realtime/useRoomPresence';
@@ -1883,6 +1885,32 @@ function Pagos() {
   const [genMonth, setGenMonth] = useState<string | undefined>();
   const [genCourseOpen, setGenCourseOpen] = useState(false);
   const [payCell, setPayCell] = useState<any>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedCells, setSelectedCells] = useState<Map<string, SelectedCell>>(new Map());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkForm] = Form.useForm();
+  const exitSelectMode = () => { setSelectMode(false); setSelectedCells(new Map()); };
+  const toggleCell = (col: any, r: any) => {
+    const key = cellKey(r.enrollmentId, col.key);
+    setSelectedCells(prev => {
+      const next = new Map(prev);
+      if (next.has(key)) next.delete(key);
+      else next.set(key, { enrollmentId: r.enrollmentId, concept: col.concept, period: col.period, mm: col.mm, studentName: r.studentName, label: col.label });
+      return next;
+    });
+  };
+  const doBulk = async (exempt: boolean) => {
+    const v = bulkForm.getFieldsValue();
+    try {
+      const { data } = await api.post('/payments/pay-cells-bulk', {
+        cells: buildBulkCells(selectedCells), method: v.method, paidAt: v.paidAt, exempt,
+      });
+      message.success(exempt
+        ? `${data.exempted} celda(s) marcada(s) como exentas`
+        : `${data.paid} cobro(s) registrado(s)${data.skipped ? `, ${data.skipped} ya estaban pagadas` : ''}`);
+      setBulkOpen(false); exitSelectMode(); load();
+    } catch { message.error('Error en la operación masiva'); }
+  };
   const [search, setSearch] = useState('');
   const [payForm] = Form.useForm();
   const activeYear = () => years.find(y => y.isActive);
@@ -1967,6 +1995,19 @@ function Pagos() {
   };
 
   const renderCell = (col: any, r: any) => {
+    if (selectMode && !r._discount) {
+      const applies = columnApplies(col, r);
+      const c = r.cells[col.key];
+      if (!applies) return <span style={{ color: '#e8e8e8' }}>—</span>;
+      if (!isCellSelectable(applies, c?.status)) {
+        const glyph = c?.status === 'pagado' ? '✓' : c?.status === 'exento' ? 'x' : c?.status === 'anulado' ? '∅' : '·';
+        return <Tag style={{ margin: 0, opacity: 0.35 }}>{glyph}</Tag>;
+      }
+      const sel = selectedCells.has(cellKey(r.enrollmentId, col.key));
+      return <Tag onClick={() => toggleCell(col, r)} color={sel ? 'blue' : undefined}
+        style={{ margin: 0, cursor: 'pointer', border: sel ? '2px solid #1677ff' : '1px dashed #bbb', background: sel ? '#e6f4ff' : 'transparent' }}>
+        {c ? '€' : '+'}</Tag>;
+    }
     if (r._discount) return col.concept === 'mensualidad'
       ? <Text style={{ color: '#C43030', fontWeight: 500 }}>−{r.monthly}€</Text>
       : null;
@@ -2029,6 +2070,17 @@ function Pagos() {
           </Popconfirm>
           <Button onClick={() => { setGenMonth(undefined); setGenOpen(true); }}>Generar recibos del mes</Button>
           <Button onClick={load}>Actualizar</Button>
+          <Button type={selectMode ? 'primary' : 'default'} onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}>
+            {selectMode ? 'Salir de selección' : 'Modo selección'}
+          </Button>
+          {selectMode && <>
+            <Text type="secondary">{selectedCells.size} celdas · {countSelectedStudents(selectedCells)} alumnos</Text>
+            <Button type="primary" disabled={selectedCells.size === 0}
+              onClick={() => { bulkForm.setFieldsValue({ method: 'efectivo', paidAt: new Date().toISOString().slice(0, 10) }); setBulkOpen(true); }}>
+              Cobrar selección ({selectedCells.size})
+            </Button>
+            <Button disabled={selectedCells.size === 0} onClick={() => setSelectedCells(new Map())}>Limpiar</Button>
+          </>}
         </Space>
         <SearchableTable rowKey="enrollmentId" dataSource={[...(data.rows || []), ...(data.discountRows || []).map((d: any) => ({ enrollmentId: 'disc-' + d.familyId, _discount: true, studentName: `Descuento hermanos · ${d.familyName}`, monthly: d.monthly }))].filter(matchSearch)} loading={loading} columns={cols} pagination={{ pageSize: 20 }} scroll={{ x: 'max-content' }} size="small" />
       </Card>
@@ -2069,6 +2121,23 @@ function Pagos() {
           </Form.Item>
           <Form.Item name="amount" label="Importe (€)" tooltip="Si lo dejas vacío, se usa la tarifa que corresponda al alumno.">
             <InputNumber min={0} step={0.5} style={{ width: '100%' }} placeholder="Automático según tarifa" />
+          </Form.Item>
+          <Form.Item name="paidAt" label="Fecha de pago"><Input type="date" /></Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal title="Cobro masivo" open={bulkOpen} onCancel={() => setBulkOpen(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setBulkOpen(false)}>Cancelar</Button>,
+          <Button key="exempt" onClick={() => doBulk(true)}>Marcar exento</Button>,
+          <Button key="pay" type="primary" onClick={() => doBulk(false)}>Marcar pagado</Button>,
+        ]}>
+        <Alert type="info" showIcon style={{ marginBottom: 12 }}
+          message={`${selectedCells.size} celdas de ${countSelectedStudents(selectedCells)} alumnos`}
+          description="El importe se resuelve automáticamente por celda según la tarifa. «Marcar exento» ignora método y fecha. Las celdas ya pagadas se omiten." />
+        <Form form={bulkForm} layout="vertical">
+          <Form.Item name="method" label="Método de pago" rules={[{ required: true }]}>
+            <Select options={['efectivo','transferencia','domiciliacion','bizum','tpv'].map(m => ({ value: m, label: m }))} />
           </Form.Item>
           <Form.Item name="paidAt" label="Fecha de pago"><Input type="date" /></Form.Item>
         </Form>

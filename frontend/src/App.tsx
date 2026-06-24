@@ -1899,6 +1899,25 @@ function Pagos() {
       return next;
     });
   };
+  // Seleccionar/deseleccionar toda la columna (sólo celdas seleccionables de las filas visibles según el buscador).
+  const selectColumn = (col: any) => {
+    const selectable = (data.rows || []).filter((r: any) => {
+      if (r._discount || !matchSearch(r)) return false;
+      const applies = columnApplies(col, r);
+      return applies && isCellSelectable(applies, r.cells[col.key]?.status);
+    });
+    if (!selectable.length) return;
+    const allSel = selectable.every((r: any) => selectedCells.has(cellKey(r.enrollmentId, col.key)));
+    setSelectedCells(prev => {
+      const next = new Map(prev);
+      for (const r of selectable) {
+        const key = cellKey(r.enrollmentId, col.key);
+        if (allSel) next.delete(key);
+        else next.set(key, { enrollmentId: r.enrollmentId, concept: col.concept, period: col.period, mm: col.mm, studentName: r.studentName, label: col.label });
+      }
+      return next;
+    });
+  };
   const doBulk = async (exempt: boolean) => {
     const v = bulkForm.getFieldsValue();
     try {
@@ -2036,7 +2055,10 @@ function Pagos() {
     { title: 'Grupo', dataIndex: 'groupName', fixed: 'left', width: 130,
       render: (g: any, r: any) => r._discount ? null : (g ? <Tag color="geekblue" style={{ margin: 0 }}>{g}</Tag> : <span style={{ color: '#bbb' }}>(sin grupo)</span>) },
     ...(data.columns || []).map((col: any) => ({
-      title: col.label, key: col.key, align: 'center',
+      title: selectMode
+        ? <Tooltip title="Seleccionar / deseleccionar toda la columna"><a onClick={() => selectColumn(col)} style={{ color: 'inherit', textDecorationLine: 'underline', textDecorationStyle: 'dotted' }}>{col.label}</a></Tooltip>
+        : col.label,
+      key: col.key, align: 'center',
       width: (col.concept === 'matricula' || col.concept === 'material') ? 80 : 56,
       onHeaderCell: () => ({ style: (col.concept === 'matricula' || col.concept === 'material' || col.flag)
         ? { background: '#EEF5FA' } : {} }),
@@ -2074,7 +2096,7 @@ function Pagos() {
             {selectMode ? 'Salir de selección' : 'Modo selección'}
           </Button>
           {selectMode && <>
-            <Text type="secondary">{selectedCells.size} celdas · {countSelectedStudents(selectedCells)} alumnos</Text>
+            <Text type="secondary">{selectedCells.size} celdas · {countSelectedStudents(selectedCells)} alumnos · clic en la cabecera de una columna para marcarla entera</Text>
             <Button type="primary" disabled={selectedCells.size === 0}
               onClick={() => { bulkForm.setFieldsValue({ method: 'efectivo', paidAt: new Date().toISOString().slice(0, 10) }); setBulkOpen(true); }}>
               Cobrar selección ({selectedCells.size})
@@ -4274,6 +4296,8 @@ function HorarioAulas() {
   const [drag, setDrag] = useState<any>(null);
   const [overKey, setOverKey] = useState<string | null>(null);
   const [newRoom, setNewRoom] = useState('');
+  const [filterServices, setFilterServices] = useState<string[]>([]);
+  const [filterRooms, setFilterRooms] = useState<string[]>([]);
   const [assignCell, setAssignCell] = useState<any>(null); // {weekday, room, time}
   const [assignForm] = Form.useForm();
   const [teacherFor, setTeacherFor] = useState<any>(null); // block
@@ -4286,15 +4310,19 @@ function HorarioAulas() {
   useLiveQuery(['schedule_slots', 'groups'], load);
   useEffect(() => { load(); api.get('/catalog/groups').then(r => setGroups(r.data)); api.get('/teachers').then(r => setTeachers(r.data)); }, []);
 
-  const times = Array.from(new Set([...HA_DEF_TIMES, ...blocks.map(b => b.start)])).filter(Boolean).sort();
+  // Filtros (servicio / aula). Vacío = sin filtrar. serviceName y serviceColor vienen ya en cada bloque.
+  const serviceNames = Array.from(new Set(blocks.map(b => b.serviceName).filter(Boolean))).sort();
+  const shownBlocks = blocks.filter(b => filterServices.length === 0 || filterServices.includes(b.serviceName));
+  const shownRooms = rooms.filter(r => filterRooms.length === 0 || filterRooms.includes(r));
+  const times = Array.from(new Set([...HA_DEF_TIMES, ...shownBlocks.map(b => b.start)])).filter(Boolean).sort();
 
   // Plan de ocupación: cada bloque abarca (rowSpan) todas las franjas de su duración.
   const colKeys: { d: number; r: string; key: string }[] = [];
-  HA_DAYS.forEach(d => rooms.forEach(r => colKeys.push({ d, r, key: `${d}-${r}` })));
+  HA_DAYS.forEach(d => shownRooms.forEach(r => colKeys.push({ d, r, key: `${d}-${r}` })));
   const plan: Record<string, any[]> = {};
   for (const { d, r, key } of colKeys) {
     const arr: any[] = times.map(() => ({ type: 'empty' }));
-    const colBlocks = blocks.filter(b => b.weekday === d && (b.room || '') === r)
+    const colBlocks = shownBlocks.filter(b => b.weekday === d && (b.room || '') === r)
       .sort((a, b) => toMin(a.start) - toMin(b.start) || (toMin(b.end) - toMin(b.start)) - (toMin(a.end) - toMin(a.start)));
     for (const b of colBlocks) {
       const si = times.indexOf(b.start);
@@ -4321,7 +4349,6 @@ function HorarioAulas() {
     catch { message.error('No se pudo mover'); }
   };
   const addRoom = async () => { if (!newRoom.trim()) return; try { await api.post('/schedule/rooms', { name: newRoom.trim() }); setNewRoom(''); load(); } catch { message.error('Error'); } };
-  const delRoom = async (name: string) => { try { await api.delete(`/schedule/rooms/${encodeURIComponent(name)}`); message.success('Aula eliminada'); load(); } catch { message.error('Error'); } };
   const delBlock = async (id: string) => { try { await api.delete(`/schedule/${id}`); load(); } catch { message.error('Error'); } };
   const openAssign = (wd: number, room: string, t: string) => { setAssignCell({ weekday: wd, room, time: t }); assignForm.resetFields(); assignForm.setFieldsValue({ durationMin: 60 }); };
   const doAssign = async (v: any) => {
@@ -4336,25 +4363,31 @@ function HorarioAulas() {
   return (
     <Card size="small" styles={{ body: { padding: 12 } }} style={{ marginBottom: 16 }}
       title={<span><DashboardOutlined /> Horario por aulas</span>}
-      extra={<Space>
-        <Input size="small" placeholder="Nueva aula" value={newRoom} onChange={e => setNewRoom(e.target.value)} onPressEnter={addRoom} style={{ width: 120 }} />
+      extra={<Space wrap>
+        <Select mode="multiple" allowClear size="small" placeholder="Servicio" style={{ minWidth: 150 }}
+          value={filterServices} onChange={setFilterServices} maxTagCount="responsive"
+          options={serviceNames.map(n => ({ value: n, label: n }))} />
+        <Select mode="multiple" allowClear size="small" placeholder="Aula" style={{ minWidth: 130 }}
+          value={filterRooms} onChange={setFilterRooms} maxTagCount="responsive"
+          options={rooms.map(r => ({ value: r, label: r }))} />
+        <Input size="small" placeholder="Nueva aula" value={newRoom} onChange={e => setNewRoom(e.target.value)} onPressEnter={addRoom} style={{ width: 110 }} />
         <Button size="small" onClick={addRoom}>+ Aula</Button>
         <Button size="small" onClick={load} loading={loading}>Actualizar</Button>
       </Space>}>
       <div style={{ fontSize: 12, color: '#6B6B7B', marginBottom: 8 }}>
         Arrastra las clases entre <b>aulas</b>, <b>días</b> y <b>horas</b>; el cambio actualiza el grupo (día, hora, aula).
         Pulsa una celda vacía para <b>colocar un grupo</b>. Menú <b>⋯</b> de cada clase para cambiar profesor o quitarla.
-        Aulas: {rooms.map(r => <Popconfirm key={r} title={`¿Eliminar el aula ${r}?`} onConfirm={() => delRoom(r)}><Tag style={{ cursor: 'pointer' }}>{r} ✕</Tag></Popconfirm>)}
+        Usa los filtros de <b>servicio</b> y <b>aula</b> (arriba a la derecha) para ver sólo lo que te interese.
       </div>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
           <thead>
             <tr>
               <th rowSpan={2} style={{ position: 'sticky', left: 0, background: '#F5F2ED', border: '1px solid #E2DDD8', padding: 4, minWidth: 46 }}>Hora</th>
-              {HA_DAYS.map(d => <th key={d} colSpan={rooms.length || 1} style={{ border: '1px solid #E2DDD8', borderLeft: '3px solid #8a8174', background: '#EEF5FA', padding: 4, fontFamily: "'Lora',serif" }}>{HA_DAYNAMES[d]}</th>)}
+              {HA_DAYS.map(d => <th key={d} colSpan={shownRooms.length || 1} style={{ border: '1px solid #E2DDD8', borderLeft: '3px solid #8a8174', background: '#EEF5FA', padding: 4, fontFamily: "'Lora',serif" }}>{HA_DAYNAMES[d]}</th>)}
             </tr>
             <tr>
-              {HA_DAYS.map(d => rooms.map((r, ri) => <th key={d + r} style={{ border: '1px solid #E2DDD8', borderLeft: ri === 0 ? '3px solid #8a8174' : '1px solid #E2DDD8', background: '#F5F2ED', padding: '2px 4px', fontWeight: 500, minWidth: 96 }}>{r}</th>))}
+              {HA_DAYS.map(d => shownRooms.map((r, ri) => <th key={d + r} style={{ border: '1px solid #E2DDD8', borderLeft: ri === 0 ? '3px solid #8a8174' : '1px solid #E2DDD8', background: '#F5F2ED', padding: '2px 4px', fontWeight: 500, minWidth: 96 }}>{r}</th>))}
             </tr>
           </thead>
           <tbody>
@@ -4368,7 +4401,7 @@ function HorarioAulas() {
                   if (cp.type === 'block') {
                     return (
                       <td key={k} rowSpan={cp.span} onDragOver={e => { e.preventDefault(); setOverKey(k); }} onDrop={() => dropOn(d, r, t)}
-                        style={{ border: '1px solid #EDE9E4', verticalAlign: 'top', padding: 2, minWidth: 96, background: overKey === k ? '#EEF5FA' : '#fff', borderLeft: r === rooms[0] ? '3px solid #8a8174' : undefined }}>
+                        style={{ border: '1px solid #EDE9E4', verticalAlign: 'top', padding: 2, minWidth: 96, background: overKey === k ? '#EEF5FA' : '#fff', borderLeft: r === shownRooms[0] ? '3px solid #8a8174' : undefined }}>
                         {cp.blocks.map((b: any) => (
                           <div key={b.id} draggable onDragStart={(e) => { e.stopPropagation(); setDrag(b); }} onDragEnd={() => { setDrag(null); setOverKey(null); }}
                             style={{ minHeight: cp.blocks.length === 1 ? cp.span * 38 - 6 : 36, borderLeft: `3px solid ${effGroupColor(b.color, b.groupName, b.programName) || b.serviceColor || '#579172'}`, background: pastel(effGroupColor(b.color, b.groupName, b.programName), 0.86) || '#F5F2ED', borderRadius: 4, padding: '2px 4px', marginBottom: 2, cursor: 'grab' }}>
@@ -4388,14 +4421,14 @@ function HorarioAulas() {
                   return (
                     <td key={k} onDragOver={e => { e.preventDefault(); setOverKey(k); }} onDrop={() => dropOn(d, r, t)}
                       onClick={() => openAssign(d, r, t)}
-                      style={{ border: '1px solid #EDE9E4', verticalAlign: 'top', padding: 2, minWidth: 96, height: 38, background: overKey === k ? '#EEF5FA' : '#fcfcfb', cursor: 'pointer', borderLeft: r === rooms[0] ? '3px solid #8a8174' : undefined }} />
+                      style={{ border: '1px solid #EDE9E4', verticalAlign: 'top', padding: 2, minWidth: 96, height: 38, background: overKey === k ? '#EEF5FA' : '#fcfcfb', cursor: 'pointer', borderLeft: r === shownRooms[0] ? '3px solid #8a8174' : undefined }} />
                   );
                 })}
               </tr>
             ))}
           </tbody>
         </table>
-        {rooms.length === 0 && <Text type="secondary">Añade aulas para empezar.</Text>}
+        {shownRooms.length === 0 && <Text type="secondary">{rooms.length === 0 ? 'Añade aulas para empezar.' : 'Ningún aula coincide con el filtro.'}</Text>}
       </div>
 
       <Modal title="Colocar grupo en el horario" open={!!assignCell} onCancel={() => setAssignCell(null)} onOk={() => assignForm.submit()} okText="Colocar">
@@ -4443,14 +4476,17 @@ function Organizacion() {
 
   const load = async () => {
     if (!serviceId) return;
+    // Danza tiene su propio modelo (asignaciones por día); cuando se elige, se muestra su tablero (DanzaBoard) en vez del kanban genérico.
+    if (services.find((s: any) => s.id === serviceId)?.code === 'DANZA') return;
     setLoading(true);
     try { const { data } = await api.get('/enrollments/board', { params: { serviceId } }); setData(data); }
     finally { setLoading(false); }
   };
   useLiveQuery(['enrollments', 'groups', 'students'], load);
-  // Danza NO se organiza aquí (tiene su propia sección por días); el kanban es para servicios de grupo único.
-  useEffect(() => { api.get('/catalog/services').then(r => { const svc = r.data.filter((s: any) => s.code !== 'DANZA'); setServices(svc); const ing = svc.find((s: any) => s.code === 'INGLES'); setServiceId(ing?.id || svc[0]?.id); }); }, []);
+  // Todos los servicios (incluida Danza) aparecen en el selector; Danza renderiza su tablero por días.
+  useEffect(() => { api.get('/catalog/services').then(r => { const svc = r.data; setServices(svc); const ing = svc.find((s: any) => s.code === 'INGLES'); setServiceId(ing?.id || svc[0]?.id); }); }, []);
   useEffect(() => { if (serviceId) load(); }, [serviceId]);
+  const isDanza = services.find((s: any) => s.id === serviceId)?.code === 'DANZA';
 
   const move = async (enrollmentId: string, targetGroupId: string | null) => {
     const st = data.students.find((s: any) => s.enrollmentId === enrollmentId);
@@ -4617,19 +4653,19 @@ function Organizacion() {
       {/* Horario por aulas (estilo Excel) en la parte superior */}
       <HorarioAulas />
       <Title level={4} style={{ marginTop: 8 }}>Grupos y alumnos</Title>
-      <Ayuda title="Tablero de grupos (arrastra alumnos)">
+      {!isDanza && <Ayuda title="Tablero de grupos (arrastra alumnos)">
         Elige un <b>servicio</b>. La primera columna <b>«Sin grupo / Bolsa»</b> contiene los <b>preinscritos</b> y los alumnos sin grupo, listos para colocar.
         <b>Arrastra un alumno</b> a un grupo (o usa el menú <b>⋯</b>) y se refleja en <b>Matrículas, Asistencia, panel del profesor y pagos</b>.
         Colores por estado: <Tag color="green">✓ Matriculado</Tag> <Tag color="gold">Preinscrito</Tag> <Tag color="orange">Lista de espera</Tag> <Tag color="blue">Pendiente</Tag>.
         Desde <b>⋯</b> puedes <b>matricular</b>, cambiar estado o <b>añadir un comentario</b> (aparece un 💬; pasa el ratón para leerlo).
         Para <b>reordenar las columnas</b>, arrastra la cabecera del grupo (icono ⠿) y suéltala sobre la posición deseada.
-      </Ayuda>
+      </Ayuda>}
       <Space wrap style={{ marginBottom: 12 }}>
         <Text>Servicio:</Text>
         <Select value={serviceId} onChange={setServiceId} style={{ width: 220 }} options={services.map((s: any) => ({ value: s.id, label: s.name }))} />
-        <Button onClick={load} loading={loading}>Actualizar</Button>
+        {!isDanza && <Button onClick={load} loading={loading}>Actualizar</Button>}
       </Space>
-      {kanban}
+      {isDanza ? <DanzaBoard /> : kanban}
     </div>
   );
 }

@@ -136,6 +136,24 @@ totals: {
 - La línea de descuento pasa de estimación informativa a la **suma de descuentos realmente
   aplicados** (`sibling_discounts` status='aplicado') en el rango del informe. Importe configurable.
 
+### 4-bis. Auto-aplicación al cobrar a todos los hermanos
+
+Cuando, tras un cobro de mensualidad, **todas** las mensualidades de los hermanos
+facturados ese mes quedan en `pagado` (y hay ≥2 hermanos distintos), el descuento de ese
+mes se **aplica automáticamente**. Helper `maybeAutoApplyDiscount(q, familyId, yearId,
+period, paidAt, method)` invocado desde los tres puntos de cobro: `applyCellPayment`
+(pay-cell / pay-cells-bulk), `pay-charge` y `set-charge-status`→pagado.
+
+Reglas:
+- Cuenta **alumnos distintos** con cuota>0 ese mes; exige que **todas** sus mensualidades
+  del periodo estén `pagado` (no `exento`/`pendiente`).
+- **No** toca un mes que ya tenga registro en `sibling_discounts` (respeta aplicaciones y
+  anulaciones manuales): si se anuló a mano, no se resucita.
+- **No** auto-retira el descuento si luego se deshace un cobro (fuera de alcance; la
+  secretaría puede anularlo a mano).
+- Idempotente (`ON CONFLICT (family_id, period) DO NOTHING`); seguro dentro de la
+  transacción del cobro masivo.
+
 ## Frontend (`App.tsx`, componente `Pagos` y `Configuración`)
 
 1. **Celda de descuento clicable** (`renderCell`, ~`App.tsx:2086`):

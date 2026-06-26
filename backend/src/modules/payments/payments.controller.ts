@@ -129,6 +129,41 @@ export class PaymentsController {
     return Math.round(eur * (sib - 1) * 100) / 100;
   }
 
+  // Auto-aplicación: si TODAS las mensualidades de los hermanos facturados ese mes están
+  // pagadas (≥2 hermanos), aplica el descuento de la familia para ese mes. No toca un mes
+  // que ya tenga registro (respeta aplicaciones/anulaciones manuales). `q` permite usarla
+  // dentro de la transacción del cobro masivo.
+  private async maybeAutoApplyDiscount(
+    q: { query: (sql: string, params?: any[]) => Promise<any> },
+    familyId: string, yearId: string, period: string, paidAt?: string, method?: string,
+  ): Promise<void> {
+    if (!familyId || !yearId || !period) return;
+    const mm = period.slice(5, 7);
+    const ex = await q.query(`SELECT 1 FROM secretaria.sibling_discounts WHERE family_id=$1 AND period=$2 LIMIT 1`, [familyId, period]);
+    if (ex[0]) return; // ya hay decisión registrada para este mes
+    const r = await q.query(
+      `SELECT count(DISTINCT st.id) AS sib,
+              count(*) FILTER (WHERE NOT EXISTS (
+                SELECT 1 FROM secretaria.charges c
+                 WHERE c.enrollment_id=e.id AND c.concept='mensualidad' AND c.period=$3 AND c.status='pagado'
+              )) AS unpaid
+         FROM secretaria.enrollments e
+         JOIN secretaria.students st ON st.id=e.student_id
+        WHERE st.family_id=$1 AND e.academic_year_id=$2 AND e.status='matriculado'
+          AND secretaria.fn_resolve_month_amount(e.id,$4) > 0`,
+      [familyId, yearId, period, mm]);
+    const sib = Number(r[0]?.sib) || 0;
+    const unpaid = Number(r[0]?.unpaid) || 0;
+    if (sib < 2 || unpaid > 0) return; // falta cobrar a algún hermano facturado ese mes
+    const eur = await this.getSiblingDiscountEur();
+    const amount = Math.round(eur * (sib - 1) * 100) / 100;
+    if (amount <= 0) return;
+    await q.query(
+      `INSERT INTO secretaria.sibling_discounts(family_id, academic_year_id, period, amount, status, method, applied_at)
+       VALUES ($1,$2,$3,$4,'aplicado',$5,$6) ON CONFLICT (family_id, period) DO NOTHING`,
+      [familyId, yearId, period, amount, method || 'efectivo', paidAt || new Date().toISOString().slice(0, 10)]);
+  }
+
   // Aplicar la línea de descuento de una familia/mes (clic en la celda de descuento).
   @Post('apply-discount') @Roles('secretaria_admin','secretaria_staff')
   async applyDiscount(@Body() b: ApplyDiscountDto) {
@@ -335,7 +370,8 @@ export class PaymentsController {
   @Post('pay-charge') @Roles('secretaria_admin','secretaria_staff')
   async payCharge(@Body() b: PayChargeDto) {
     const rows = await this.ds.query(`
-      SELECT c.id, c.amount_due, c.concept, c.enrollment_id AS "enrollmentId", e.status AS "enrStatus", st.family_id
+      SELECT c.id, c.amount_due, c.concept, c.period, c.enrollment_id AS "enrollmentId", e.status AS "enrStatus",
+             e.academic_year_id AS "yearId", st.family_id
       FROM secretaria.charges c JOIN secretaria.enrollments e ON e.id=c.enrollment_id
       JOIN secretaria.students st ON st.id=e.student_id WHERE c.id=$1`, [b.chargeId]);
     if (!rows[0]) return { ok: false, error: 'Recibo no encontrado' };
@@ -355,6 +391,9 @@ export class PaymentsController {
          WHERE id=$1 AND status='preinscrito'`, [rows[0].enrollmentId]);
       promoted = true;
     }
+    if (rows[0].concept === 'mensualidad' && rows[0].period) {
+      await this.maybeAutoApplyDiscount(this.ds, rows[0].family_id, rows[0].yearId, rows[0].period, paidAt, b.method);
+    }
     return { ok: true, paymentId: pay[0].id, promoted };
   }
 
@@ -366,7 +405,7 @@ export class PaymentsController {
   ): Promise<{ ok: boolean; chargeId?: string; promoted: boolean; outcome: 'paid' | 'exempted' | 'skipped' | 'notfound' }> {
     const period = p.concept === 'mensualidad' ? (p.period || null) : null;
     const er = await q.query(
-      `SELECT e.status AS "enrStatus", st.family_id AS "familyId"
+      `SELECT e.status AS "enrStatus", st.family_id AS "familyId", e.academic_year_id AS "yearId"
        FROM secretaria.enrollments e JOIN secretaria.students st ON st.id=e.student_id WHERE e.id=$1`, [p.enrollmentId]);
     if (!er[0]) return { ok: false, promoted: false, outcome: 'notfound' };
 
@@ -413,6 +452,11 @@ export class PaymentsController {
         [pay[0].id, chargeId, amount]);
       await q.query(`UPDATE secretaria.charges SET status='pagado' WHERE id=$1`, [chargeId]);
       outcome = 'paid';
+      // Auto-aplicar el descuento por hermanos si con este cobro ya están pagadas
+      // todas las mensualidades de los hermanos facturados ese mes.
+      if (p.concept === 'mensualidad' && period) {
+        await this.maybeAutoApplyDiscount(q, er[0].familyId, er[0].yearId, period, paidAt, p.method);
+      }
     } else {
       outcome = 'skipped'; // ya estaba pagado
     }
@@ -488,7 +532,8 @@ export class PaymentsController {
   async setChargeStatus(@Body() b: { chargeId: string; status: 'pagado'|'pendiente'|'anulado'|'exento'; method?: string; amount?: number; paidAt?: string }) {
     if (!['pagado','pendiente','anulado','exento'].includes(b.status)) return { ok: false, error: 'Estado no válido' };
     const rows = await this.ds.query(`
-      SELECT c.id, c.amount_due, c.concept, c.status, c.enrollment_id AS "enrollmentId", e.status AS "enrStatus", st.family_id
+      SELECT c.id, c.amount_due, c.concept, c.status, c.period, c.enrollment_id AS "enrollmentId", e.status AS "enrStatus",
+             e.academic_year_id AS "yearId", st.family_id
       FROM secretaria.charges c JOIN secretaria.enrollments e ON e.id=c.enrollment_id
       JOIN secretaria.students st ON st.id=e.student_id WHERE c.id=$1`, [b.chargeId]);
     if (!rows[0]) return { ok: false, error: 'Recibo no encontrado' };
@@ -506,6 +551,9 @@ export class PaymentsController {
         await this.ds.query(`UPDATE secretaria.charges SET status='pagado' WHERE id=$1`, [b.chargeId]);
         if (r.concept === 'matricula' && r.enrStatus === 'preinscrito') {
           await this.ds.query(`UPDATE secretaria.enrollments SET status='matriculado', enrolled_at=now(), status_changed_at=now() WHERE id=$1 AND status='preinscrito'`, [r.enrollmentId]);
+        }
+        if (r.concept === 'mensualidad' && r.period) {
+          await this.maybeAutoApplyDiscount(this.ds, r.family_id, r.yearId, r.period, paidAt, b.method);
         }
       }
       return { ok: true };

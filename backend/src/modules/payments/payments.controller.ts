@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, UseGuards, Query } from '@nestjs/common';
 import { IsString, IsOptional, IsUUID, IsNumber, IsIn, IsBoolean, IsArray, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { dedupeCells, summarizeBulkOutcomes } from './payments.bulk';
@@ -8,8 +8,10 @@ import { SecretariaAuthGuard, Roles } from '../../common/secretaria-auth.guard';
 
 const METHODS = ['efectivo','transferencia','domiciliacion','bizum','tpv'];
 
-// Descuento por hermanos: 5€ por cada hermano adicional (alumno matriculado) de la familia, por mes.
-const SIBLING_DISCOUNT_EUR = 5;
+// Descuento por hermanos: importe en € por cada hermano ADICIONAL facturado ese mes.
+// Fuente única: clave 'sibling_discount_eur' en secretaria.org_settings (editable en Configuración).
+// Fallback a este valor si no está configurado. Ver PaymentsController.getSiblingDiscountEur().
+const SIBLING_DISCOUNT_DEFAULT_EUR = 5;
 
 class GenerateDto { @IsUUID() academicYearId: string; @IsString() period: string; @IsOptional() @IsUUID() serviceId?: string; }
 class GenerateCourseDto { @IsUUID() academicYearId: string; @IsOptional() @IsUUID() serviceId?: string; }
@@ -47,6 +49,19 @@ class PayCellsBulkDto {
   @IsOptional() @IsBoolean() exempt?: boolean;
 }
 
+// Ajuste global del importe del descuento por hermanos (€/mes por hermano adicional).
+class DiscountSettingDto { @IsNumber() siblingDiscountEur: number; }
+// Aplicar/anular la línea de descuento de UNA familia en UN mes (abono). El importe se
+// recalcula SIEMPRE en servidor (no se confía en el cliente).
+class ApplyDiscountDto {
+  @IsUUID() familyId: string;
+  @IsUUID() academicYearId: string;
+  @IsString() period: string;            // 'YYYY-MM'
+  @IsOptional() @IsIn(METHODS) method?: string;
+  @IsOptional() @IsString() paidAt?: string;
+}
+class UnapplyDiscountDto { @IsUUID() familyId: string; @IsString() period: string; }
+
 // Meses de mensualidad del curso (sep→ago). El cobro real de cada mes lo decide
 // el factor por programa (0 no se cobra, 0.5 medio mes, 1 completo).
 function monthCols(startYear: number) {
@@ -68,6 +83,73 @@ export class PaymentsController {
   private async startYearFor(yearId: string): Promise<number> {
     const yr = await this.ds.query(`SELECT start_date FROM secretaria.academic_years WHERE id=$1`, [yearId]);
     return yr[0] ? new Date(yr[0].start_date).getFullYear() : new Date().getFullYear();
+  }
+
+  // ---------------- Descuento por hermanos: importe configurable ----------------
+  // Caché en memoria (60s) para no leer org_settings en cada cálculo de matriz/morosidad.
+  private _discCache: { v: number; t: number } | null = null;
+  private async getSiblingDiscountEur(): Promise<number> {
+    const now = Date.now();
+    if (this._discCache && now - this._discCache.t < 60_000) return this._discCache.v;
+    const r = await this.ds.query(`SELECT value FROM secretaria.org_settings WHERE key='sibling_discount_eur'`);
+    const v = Number(r[0]?.value);
+    const val = Number.isFinite(v) && v >= 0 ? v : SIBLING_DISCOUNT_DEFAULT_EUR;
+    this._discCache = { v: val, t: now };
+    return val;
+  }
+
+  @Get('discount-setting') @Roles('secretaria_admin','secretaria_staff','direccion')
+  async getDiscountSetting() {
+    return { siblingDiscountEur: await this.getSiblingDiscountEur() };
+  }
+
+  @Put('discount-setting') @Roles('secretaria_admin')
+  async putDiscountSetting(@Body() b: DiscountSettingDto) {
+    const val = Number(b.siblingDiscountEur);
+    if (!Number.isFinite(val) || val < 0) return { ok: false, error: 'Importe no válido' };
+    await this.ds.query(
+      `INSERT INTO secretaria.org_settings(key,value) VALUES ('sibling_discount_eur',$1)
+       ON CONFLICT (key) DO UPDATE SET value=$1`, [String(val)]);
+    this._discCache = null; // invalida la caché
+    return { ok: true, siblingDiscountEur: val };
+  }
+
+  // Descuento elegible (€) de UNA familia en UN mes: importe × (hermanos con cuota>0 ese mes − 1).
+  private async eligibleDiscount(familyId: string, yearId: string, period: string): Promise<number> {
+    const mm = period.slice(5, 7);
+    const r = await this.ds.query(
+      `SELECT count(DISTINCT st.id) FILTER (WHERE secretaria.fn_resolve_month_amount(e.id,$3) > 0) AS sib
+         FROM secretaria.enrollments e
+         JOIN secretaria.students st ON st.id=e.student_id
+        WHERE st.family_id=$1 AND e.academic_year_id=$2 AND e.status='matriculado'`,
+      [familyId, yearId, mm]);
+    const sib = Number(r[0]?.sib) || 0;
+    if (sib < 2) return 0;
+    const eur = await this.getSiblingDiscountEur();
+    return Math.round(eur * (sib - 1) * 100) / 100;
+  }
+
+  // Aplicar la línea de descuento de una familia/mes (clic en la celda de descuento).
+  @Post('apply-discount') @Roles('secretaria_admin','secretaria_staff')
+  async applyDiscount(@Body() b: ApplyDiscountDto) {
+    const amount = await this.eligibleDiscount(b.familyId, b.academicYearId, b.period);
+    if (amount <= 0) return { ok: true, applied: false };
+    const paidAt = b.paidAt || new Date().toISOString().slice(0, 10);
+    await this.ds.query(
+      `INSERT INTO secretaria.sibling_discounts(family_id, academic_year_id, period, amount, status, method, applied_at)
+       VALUES ($1,$2,$3,$4,'aplicado',$5,$6)
+       ON CONFLICT (family_id, period) DO UPDATE
+         SET amount=$4, status='aplicado', method=$5, applied_at=$6, academic_year_id=$2`,
+      [b.familyId, b.academicYearId, b.period, amount, b.method || 'efectivo', paidAt]);
+    return { ok: true, applied: true, amount };
+  }
+
+  @Post('unapply-discount') @Roles('secretaria_admin','secretaria_staff')
+  async unapplyDiscount(@Body() b: UnapplyDiscountDto) {
+    await this.ds.query(
+      `UPDATE secretaria.sibling_discounts SET status='anulado' WHERE family_id=$1 AND period=$2`,
+      [b.familyId, b.period]);
+    return { ok: true };
   }
 
   // Genera las mensualidades de UN mes para los matriculados (sólo las que falten,
@@ -197,23 +279,56 @@ export class PaymentsController {
       byEnroll[c.enrollmentId][k] = c;
     }
     const rows = students.map((s: any) => ({ ...s, cells: byEnroll[s.enrollmentId] || {} }));
-    // Descuento por hermanos: una fila por familia (presente en la vista) con ≥2 alumnos matriculados.
-    // El conteo de hermanos cruza todos los servicios, aunque la matriz esté filtrada por uno.
+
+    // Descuento por hermanos: una fila por familia (presente en la vista) con ≥2 hermanos
+    // FACTURADOS ese mes. El conteo cruza todos los servicios, aunque la matriz esté filtrada
+    // por uno. El descuento de cada mes = importe × (hermanos con cuota>0 ese mes − 1).
     const famIds = [...new Set(students.map((s: any) => s.familyId).filter(Boolean))];
+    const eur = await this.getSiblingDiscountEur();
     let discountRows: any[] = [];
+    let appliedTotal = 0;
     if (famIds.length) {
-      const fams = await this.ds.query(`
-        SELECT f.id AS "familyId", f.display_name AS "familyName",
-               (SELECT count(DISTINCT st2.id) FROM secretaria.students st2
-                  JOIN secretaria.enrollments e2 ON e2.student_id=st2.id
-                 WHERE st2.family_id=f.id AND e2.status='matriculado' AND e2.academic_year_id=$1) AS "siblingCount"
-        FROM secretaria.families f WHERE f.id = ANY($2)`, [yearId, famIds]);
-      discountRows = fams
-        .filter((f: any) => Number(f.siblingCount) >= 2)
-        .map((f: any) => ({ familyId: f.familyId, familyName: f.familyName, monthly: SIBLING_DISCOUNT_EUR * (Number(f.siblingCount) - 1) }))
+      const periods = months.map(m => m.key);
+      const mms = months.map(m => m.mm);
+      // Hermanos facturados por familia y mes (cuota resuelta > 0).
+      const sibRows = await this.ds.query(`
+        WITH months AS (SELECT * FROM unnest($2::text[], $3::text[]) AS t(period, mm))
+        SELECT st.family_id AS "familyId", f.display_name AS "familyName", mo.period AS period,
+               count(DISTINCT st.id) FILTER (WHERE secretaria.fn_resolve_month_amount(e.id, mo.mm) > 0) AS sib
+          FROM secretaria.enrollments e
+          JOIN secretaria.students st ON st.id=e.student_id
+          JOIN secretaria.families f ON f.id=st.family_id
+          CROSS JOIN months mo
+         WHERE e.academic_year_id=$1 AND e.status='matriculado' AND st.family_id = ANY($4::uuid[])
+         GROUP BY st.family_id, f.display_name, mo.period`, [yearId, periods, mms, famIds]);
+      // Descuentos ya aplicados (para marcar las celdas y restar del neto).
+      const appliedRows = await this.ds.query(`
+        SELECT family_id AS "familyId", period, amount
+          FROM secretaria.sibling_discounts
+         WHERE academic_year_id=$1 AND status='aplicado' AND family_id = ANY($2::uuid[])`, [yearId, famIds]);
+      const applied: Record<string, Record<string, number>> = {};
+      for (const a of appliedRows) {
+        (applied[a.familyId] = applied[a.familyId] || {})[a.period] = Number(a.amount);
+        appliedTotal += Number(a.amount) || 0;
+      }
+      const byFam: Record<string, any> = {};
+      for (const s of sibRows) {
+        const sib = Number(s.sib) || 0;
+        const eligible = sib >= 2 ? Math.round(eur * (sib - 1) * 100) / 100 : 0;
+        if (eligible <= 0) continue;
+        const fam = byFam[s.familyId] || (byFam[s.familyId] = { familyId: s.familyId, familyName: s.familyName, cells: {} });
+        const isApplied = applied[s.familyId]?.[s.period] != null;
+        fam.cells[s.period] = { eligible, applied: isApplied, amount: isApplied ? applied[s.familyId][s.period] : null };
+      }
+      discountRows = Object.values(byFam)
+        .filter((f: any) => Object.keys(f.cells).length > 0)
         .sort((a: any, b: any) => (a.familyName || '').localeCompare(b.familyName || ''));
     }
-    return { columns, rows, discountRows };
+
+    // Totales del ámbito visible: bruto = Σ recibos facturados; neto = bruto − descuentos aplicados.
+    const bruto = Math.round(charges.reduce((acc: number, c: any) => acc + Number(c.amountDue || 0), 0) * 100) / 100;
+    const totals = { bruto, descuentoAplicado: Math.round(appliedTotal * 100) / 100, neto: Math.round((bruto - appliedTotal) * 100) / 100 };
+    return { columns, rows, discountRows, totals };
   }
 
   // Registrar el cobro de un recibo concreto (clic en la celda)
@@ -412,6 +527,7 @@ export class PaymentsController {
   // Morosidad: recibos pendientes agrupados por familia, con contacto para reclamar
   @Get('overdue') @Roles('secretaria_admin','secretaria_staff','direccion')
   async overdue(@Query('academicYearId') yearId: string) {
+    const eur = await this.getSiblingDiscountEur();
     const rows = await this.ds.query(`
       SELECT f.id AS "familyId", f.display_name AS "familyName",
              count(c.id) AS "pendingCount", sum(c.amount_due) AS "totalDue",
@@ -419,6 +535,23 @@ export class PaymentsController {
              (SELECT count(DISTINCT st2.id) FROM secretaria.students st2
                 JOIN secretaria.enrollments e2 ON e2.student_id=st2.id
                WHERE st2.family_id=f.id AND e2.status='matriculado' AND e2.academic_year_id=$1) AS "siblingCount",
+             -- Descuento por hermanos PENDIENTE: por cada mes con mensualidad pendiente, importe ×
+             -- (hermanos facturados ese mes − 1). Coherente con la regla de la matriz.
+             COALESCE((
+               SELECT SUM($2::numeric * GREATEST(0, z.sib - 1)) FROM (
+                 SELECT pc.period,
+                        (SELECT count(DISTINCT st3.id) FROM secretaria.enrollments e3
+                           JOIN secretaria.students st3 ON st3.id=e3.student_id
+                          WHERE st3.family_id=f.id AND e3.academic_year_id=$1 AND e3.status='matriculado'
+                            AND secretaria.fn_resolve_month_amount(e3.id, substr(pc.period,6,2)) > 0) AS sib
+                 FROM (SELECT DISTINCT c2.period
+                         FROM secretaria.charges c2
+                         JOIN secretaria.enrollments e2 ON e2.id=c2.enrollment_id
+                         JOIN secretaria.students st2 ON st2.id=e2.student_id
+                        WHERE st2.family_id=f.id AND c2.status='pendiente' AND c2.concept='mensualidad'
+                          AND e2.academic_year_id=$1 AND e2.status='matriculado') pc
+               ) z
+             ), 0) AS "siblingDiscountTotal",
              (SELECT string_agg(DISTINCT g2.full_name, ', ') FROM secretaria.guardians g2 WHERE g2.family_id=f.id) AS "guardians",
              (SELECT string_agg(DISTINCT g2.phone, ', ') FROM secretaria.guardians g2 WHERE g2.family_id=f.id AND g2.phone IS NOT NULL) AS "phones",
              (SELECT string_agg(DISTINCT g2.email, ', ') FROM secretaria.guardians g2 WHERE g2.family_id=f.id AND g2.email IS NOT NULL) AS "emails"
@@ -428,15 +561,11 @@ export class PaymentsController {
       JOIN secretaria.families f ON f.id=st.family_id
       WHERE e.academic_year_id=$1 AND c.status='pendiente'
         AND e.status='matriculado'  -- preinscrito/lista de espera no son morosidad (no hay pago obligatorio)
-      GROUP BY f.id, f.display_name`, [yearId]);
-    // Descuento por hermanos (5€ por hermano adicional, por cada mes pendiente). Dinámico.
+      GROUP BY f.id, f.display_name`, [yearId, eur]);
     return rows.map((r: any) => {
-      const siblings = Number(r.siblingCount) || 0;
-      const siblingDiscountMonthly = SIBLING_DISCOUNT_EUR * Math.max(0, siblings - 1);
-      const pendingMonths = Number(r.pendingMonths) || 0;
-      const siblingDiscountTotal = siblingDiscountMonthly * pendingMonths;
       const totalDue = Number(r.totalDue) || 0;
-      return { ...r, siblingDiscountMonthly, siblingDiscountTotal, netDue: Math.max(0, totalDue - siblingDiscountTotal) };
+      const siblingDiscountTotal = Math.min(totalDue, Number(r.siblingDiscountTotal) || 0);
+      return { ...r, siblingDiscountTotal, netDue: Math.max(0, totalDue - siblingDiscountTotal) };
     }).sort((a: any, b: any) => b.netDue - a.netDue);
   }
 }

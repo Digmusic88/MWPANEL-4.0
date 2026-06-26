@@ -9,6 +9,7 @@ export class FeeSchedule {
   @Column() concept: string;
   @Column({ type: 'numeric' }) amount: number;
   @Column({ nullable: true }) label: string;
-  @Column({ name: 'siblings_discount_eur', type: 'numeric', nullable: true }) siblingsDiscountEur: number;
+  // NOTA: la columna física 'siblings_discount_eur' sigue en BD pero está EN DESUSO.
+  // El descuento por hermanos se configura en org_settings ('sibling_discount_eur'), no aquí.
   @Column({ name: 'is_active', default: true }) isActive: boolean;
 }

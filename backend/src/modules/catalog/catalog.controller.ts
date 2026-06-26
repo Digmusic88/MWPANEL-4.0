@@ -276,7 +276,7 @@ export class CatalogController {
       // 2) Copiar las TARIFAS que FALTEN en el destino (idempotente: rellena huecos sin duplicar).
       //    Sin copia de estructura se omiten las tarifas de grupo (no hay grupos en el destino).
       let feeCount = 0;
-      const fees = await m.query(`SELECT service_id, program_id, group_id, concept, amount, label, siblings_discount_eur, is_active FROM secretaria.fee_schedules WHERE academic_year_id=$1`, [sourceId]);
+      const fees = await m.query(`SELECT service_id, program_id, group_id, concept, amount, label, is_active FROM secretaria.fee_schedules WHERE academic_year_id=$1`, [sourceId]);
       for (const f of fees) {
         if (f.group_id && !copyStructure) continue;
         const newGroup = f.group_id ? (map[f.group_id] || null) : null;
@@ -287,9 +287,9 @@ export class CatalogController {
           [targetId, f.service_id, f.program_id, newGroup, f.concept]);
         if (ex[0]) continue;
         await m.query(
-          `INSERT INTO secretaria.fee_schedules(academic_year_id, service_id, program_id, group_id, concept, amount, label, siblings_discount_eur, is_active)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          [targetId, f.service_id, f.program_id, newGroup, f.concept, f.amount, f.label, f.siblings_discount_eur, f.is_active]);
+          `INSERT INTO secretaria.fee_schedules(academic_year_id, service_id, program_id, group_id, concept, amount, label, is_active)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [targetId, f.service_id, f.program_id, newGroup, f.concept, f.amount, f.label, f.is_active]);
         feeCount++;
       }
 

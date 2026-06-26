@@ -15,7 +15,6 @@ class FeeDto {
   @IsIn(CONCEPTS) concept: string;
   @IsNumber() amount: number;
   @IsOptional() @IsString() label?: string;        // p. ej. "1 día/semana"
-  @IsOptional() @IsNumber() siblingsDiscountEur?: number;
 }
 
 @Controller('secretaria/fee-schedules')

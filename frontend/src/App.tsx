@@ -1313,7 +1313,6 @@ function Tarifas() {
           </Form.Item>
           <Form.Item name="amount" label="Importe (€)" rules={[{ required: true }]}><InputNumber min={0} step={0.5} style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="label" label="Etiqueta (opcional)" tooltip='Para tarifas especiales, p. ej. "1 día/semana"'><Input placeholder="Ej.: 1 día/semana" /></Form.Item>
-          <Form.Item name="siblingsDiscountEur" label="Descuento hermanos (€)" tooltip="Importe fijo en euros a descontar por hermano"><InputNumber min={0} step={0.5} style={{ width: '100%' }} /></Form.Item>
         </Form>
       </Modal>
     </div>
@@ -1941,6 +1940,7 @@ function Pagos() {
   const [genMonth, setGenMonth] = useState<string | undefined>();
   const [genCourseOpen, setGenCourseOpen] = useState(false);
   const [payCell, setPayCell] = useState<any>(null);
+  const [discCell, setDiscCell] = useState<any>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedCells, setSelectedCells] = useState<Map<string, SelectedCell>>(new Map());
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -1988,6 +1988,7 @@ function Pagos() {
   };
   const [search, setSearch] = useState('');
   const [payForm] = Form.useForm();
+  const [discForm] = Form.useForm();
   const activeYear = () => years.find(y => y.isActive);
   // Filtro propio de Pagos: alumno + servicio + grupo + programa (acento-insensible)
   const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -2069,6 +2070,30 @@ function Pagos() {
     } catch { message.error('Error al cambiar el estado'); }
   };
 
+  // Descuento por hermanos: aplicar/anular la línea de descuento de una familia en un mes.
+  const openDiscount = (col: any, r: any) => {
+    const dc = r.cells?.[col.key];
+    if (!dc) return;
+    setDiscCell({ familyId: r.familyId, familyName: r.familyName, period: col.key, label: col.label, ...dc });
+    discForm.setFieldsValue({ method: dc.method || 'efectivo', paidAt: new Date().toISOString().slice(0, 10) });
+  };
+  const doApplyDiscount = async (v: any) => {
+    const y = activeYear(); if (!y || !discCell) return;
+    try {
+      await api.post('/payments/apply-discount', {
+        familyId: discCell.familyId, academicYearId: y.id, period: discCell.period, method: v.method, paidAt: v.paidAt,
+      });
+      message.success('Descuento por hermanos aplicado'); setDiscCell(null); load();
+    } catch { message.error('Error al aplicar el descuento'); }
+  };
+  const doUnapplyDiscount = async () => {
+    if (!discCell) return;
+    try {
+      await api.post('/payments/unapply-discount', { familyId: discCell.familyId, period: discCell.period });
+      message.success('Descuento anulado'); setDiscCell(null); load();
+    } catch { message.error('Error al anular el descuento'); }
+  };
+
   const renderCell = (col: any, r: any) => {
     if (selectMode && !r._discount) {
       const applies = columnApplies(col, r);
@@ -2083,9 +2108,16 @@ function Pagos() {
         style={{ margin: 0, cursor: 'pointer', border: sel ? '2px solid #1677ff' : '1px dashed #bbb', background: sel ? '#e6f4ff' : 'transparent' }}>
         {c ? '€' : '+'}</Tag>;
     }
-    if (r._discount) return col.concept === 'mensualidad'
-      ? <Text style={{ color: '#C43030', fontWeight: 500 }}>−{r.monthly}€</Text>
-      : null;
+    if (r._discount) {
+      if (col.concept !== 'mensualidad') return null;
+      const dc = r.cells?.[col.key];
+      if (!dc || !(dc.eligible > 0)) return null;
+      if (dc.applied) return <Tooltip title={`Descuento aplicado (−${dc.amount}€) — clic para anular`}>
+        <Tag color="green" style={{ margin: 0, cursor: 'pointer', fontWeight: 500 }} onClick={() => openDiscount(col, r)}>✓ −{dc.amount}€</Tag></Tooltip>;
+      return <Tooltip title={`Descuento por hermanos −${dc.eligible}€ — clic para aplicar`}>
+        <Tag style={{ margin: 0, cursor: 'pointer', borderStyle: 'dashed', borderColor: '#C43030', color: '#C43030', background: 'transparent', fontWeight: 500 }}
+          onClick={() => openDiscount(col, r)}>−{dc.eligible}€</Tag></Tooltip>;
+    }
     if (!columnApplies(col, r)) return <Tooltip title="Este programa no cobra este concepto/mes"><span style={{ color: '#d9d9d9' }}>—</span></Tooltip>;
     const factor = col.mm ? factorOf(r.monthBilling, col.mm) : 1;
     const partial = col.mm && factor < 1 ? ` (${factor === 0.5 ? 'medio mes' : `×${factor}`})` : '';
@@ -2160,7 +2192,7 @@ function Pagos() {
             <Button disabled={selectedCells.size === 0} onClick={() => setSelectedCells(new Map())}>Limpiar</Button>
           </>}
         </Space>
-        <SearchableTable rowKey="enrollmentId" dataSource={[...(data.rows || []), ...(data.discountRows || []).map((d: any) => ({ enrollmentId: 'disc-' + d.familyId, _discount: true, studentName: `Descuento hermanos · ${d.familyName}`, monthly: d.monthly }))].filter(matchSearch)} loading={loading} columns={cols} pagination={{ pageSize: 20 }} scroll={{ x: 'max-content' }} size="small" />
+        <SearchableTable rowKey="enrollmentId" dataSource={[...(data.rows || []), ...(data.discountRows || []).map((d: any) => ({ enrollmentId: 'disc-' + d.familyId, _discount: true, familyId: d.familyId, familyName: d.familyName, studentName: `Descuento hermanos · ${d.familyName}`, cells: d.cells }))].filter(matchSearch)} loading={loading} columns={cols} pagination={{ pageSize: 20 }} scroll={{ x: 'max-content' }} size="small" />
       </Card>
 
       <Modal title="Generar recibos del curso completo" open={genCourseOpen} onCancel={() => setGenCourseOpen(false)} onOk={doGenerateCourse} okText="Generar curso">
@@ -2201,6 +2233,25 @@ function Pagos() {
             <InputNumber min={0} step={0.5} style={{ width: '100%' }} placeholder="Automático según tarifa" />
           </Form.Item>
           <Form.Item name="paidAt" label="Fecha de pago"><Input type="date" /></Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal title={`Descuento por hermanos — ${discCell?.familyName || ''}${discCell?.label ? ` · ${discCell.label}` : ''}`}
+        open={!!discCell} onCancel={() => setDiscCell(null)} onOk={() => discForm.submit()}
+        okText={discCell?.applied ? 'Reaplicar' : 'Aplicar descuento'}
+        footer={[
+          ...(discCell?.applied ? [<Button key="unapply" danger onClick={doUnapplyDiscount}>Anular descuento</Button>] : []),
+          <Button key="cancel" onClick={() => setDiscCell(null)}>Cancelar</Button>,
+          <Button key="ok" type="primary" onClick={() => discForm.submit()}>{discCell?.applied ? 'Reaplicar' : 'Aplicar descuento'}</Button>,
+        ]}>
+        <Alert type="info" showIcon style={{ marginBottom: 12 }}
+          message={`Descuento del mes: −${discCell?.applied ? discCell?.amount : discCell?.eligible}€`}
+          description="El importe se calcula sobre el total de la familia: tarifa por cada hermano adicional facturado este mes. Las cuotas de cada hermano se cobran aparte a tarifa completa." />
+        <Form form={discForm} layout="vertical" onFinish={doApplyDiscount}>
+          <Form.Item name="method" label="Método de pago" rules={[{ required: true }]}>
+            <Select options={['efectivo','transferencia','domiciliacion','bizum','tpv'].map(m => ({ value: m, label: m }))} />
+          </Form.Item>
+          <Form.Item name="paidAt" label="Fecha de aplicación"><Input type="date" /></Form.Item>
         </Form>
       </Modal>
 
@@ -2454,6 +2505,7 @@ function Configuracion({ user }: { user?: any }) {
       <SchoolCalendarCard />
       <RolloverCard />
       <CreditorSettings />
+      <DiscountSettings />
     </div>
   );
 
@@ -2585,6 +2637,32 @@ function CreditorSettings() {
           <Col xs={24} md={12}><Form.Item name="creditorIban" label="IBAN del acreedor" rules={[{ required: true }]}><Input placeholder="ES## #### #### #### #### ####" /></Form.Item></Col>
           <Col xs={24} md={12}><Form.Item name="creditorBic" label="BIC (opcional)"><Input placeholder="XXXXESMMXXX" /></Form.Item></Col>
         </Row>
+        <Button type="primary" htmlType="submit" loading={loading}>Guardar</Button>
+      </Form>
+    </Card>
+  );
+}
+
+// Importe del descuento por hermanos (global del centro), editable. Se guarda en org_settings.
+function DiscountSettings() {
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+  useEffect(() => { api.get('/payments/discount-setting').then(r => form.setFieldsValue(r.data)); }, []);
+  const save = async (v: any) => {
+    setLoading(true);
+    try { await api.put('/payments/discount-setting', { siblingDiscountEur: v.siblingDiscountEur }); message.success('Descuento por hermanos guardado'); }
+    catch (e: any) { message.error(e?.response?.data?.message || 'Error'); }
+    finally { setLoading(false); }
+  };
+  return (
+    <Card title="Descuento por hermanos" style={{ marginTop: 16 }}>
+      <Alert type="info" showIcon style={{ marginBottom: 12 }}
+        message="Importe del descuento por hermanos aplicado en los pagos"
+        description="Se descuenta este importe por cada hermano ADICIONAL facturado cada mes, sobre el total de la familia (una sola vez por mes). Ej.: con 5€, una familia con 2 hermanos tiene 5€/mes de descuento; con 3 hermanos, 10€/mes." />
+      <Form form={form} layout="vertical" onFinish={save}>
+        <Form.Item name="siblingDiscountEur" label="Descuento (€/mes por hermano adicional)" rules={[{ required: true }]}>
+          <InputNumber min={0} step={0.5} style={{ width: 240 }} />
+        </Form.Item>
         <Button type="primary" htmlType="submit" loading={loading}>Guardar</Button>
       </Form>
     </Card>

@@ -602,6 +602,14 @@ const sectionColor = (name: string) => {
   let h = 0; for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
   return SECTION_PALETTE[h % SECTION_PALETTE.length];
 };
+// Renderiza el snippet de búsqueda: ts_headline marca lo encontrado con [[HL]]…[[/HL]] → <mark>.
+const renderSnippet = (s: string) => {
+  if (!s) return null;
+  const parts = String(s).split(/\[\[HL\]\]|\[\[\/HL\]\]/);
+  return parts.map((p, i) => i % 2 === 1
+    ? <mark key={i} style={{ background: '#FFF1A8', padding: '0 1px' }}>{p}</mark>
+    : <span key={i}>{p}</span>);
+};
 const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const WEEK_NAMES = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const plannedCount = (cls: any) => (cls.sections || []).filter((s: any) => (cls.entries[s.id]?.content || '').trim()).length;
@@ -640,13 +648,28 @@ function ClassBlock({ cls, onClick }: any) {
 }
 function Cuaderno({ user }: { user?: any }) {
   const today = isoDay(new Date());
-  const [mode, setMode] = useState<string>(() => { const m = localStorage.getItem('cuaderno_mode'); return ['semana', 'dia', 'resumen'].includes(m || '') ? (m as string) : 'semana'; });
+  const [mode, setMode] = useState<string>(() => { const m = localStorage.getItem('cuaderno_mode'); return ['semana', 'dia', 'resumen', 'buscar'].includes(m || '') ? (m as string) : 'semana'; });
   const setModeP = (m: string) => { setMode(m); localStorage.setItem('cuaderno_mode', m); };
   const [anchor, setAnchor] = useState(today);
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalCls, setModalCls] = useState<any>(null);
   const [secMgr, setSecMgr] = useState<string | null>(null);
+  // Búsqueda de texto en el cuaderno (full-text por palabras, con debounce)
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+  useEffect(() => {
+    if (mode !== 'buscar') return;
+    const term = q.trim();
+    if (!term) { setResults([]); setSearching(false); return; }
+    setSearching(true);
+    const t = setTimeout(() => {
+      api.get('/notebook/search', { params: { q: term } }).then(r => setResults(r.data)).catch(() => setResults([])).finally(() => setSearching(false));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [q, mode]);
+  const openResult = (r: any) => { setAnchor(r.date); setModeP('dia'); };
 
   const [from, to] = useMemo(() => {
     const d = new Date(anchor + 'T00:00:00');
@@ -678,6 +701,7 @@ function Cuaderno({ user }: { user?: any }) {
           <Button type={mode === 'semana' ? 'primary' : 'default'} onClick={() => setModeP('semana')}>Semana</Button>
           <Button type={mode === 'dia' ? 'primary' : 'default'} onClick={() => setModeP('dia')}>Día</Button>
           <Button type={mode === 'resumen' ? 'primary' : 'default'} onClick={() => setModeP('resumen')}>Resumen</Button>
+          <Button type={mode === 'buscar' ? 'primary' : 'default'} onClick={() => setModeP('buscar')}>Buscar</Button>
         </Space>
       </div>
       <Ayuda title="Planifica tus clases en calendario">
@@ -687,6 +711,7 @@ function Cuaderno({ user }: { user?: any }) {
       </Ayuda>
 
       <Card>
+        {mode !== 'buscar' && (
         <Space style={{ marginBottom: 12 }} wrap>
           <Button onClick={() => shift(mode === 'semana' ? -7 : -1)}>←</Button>
           <Button onClick={() => setAnchor(today)}>{mode === 'semana' ? 'Esta semana' : 'Hoy'}</Button>
@@ -694,8 +719,39 @@ function Cuaderno({ user }: { user?: any }) {
           {mode !== 'semana' && <Input type="date" value={anchor} onChange={e => setAnchor(e.target.value)} style={{ width: 160 }} />}
           <Text type="secondary">{mode === 'semana' ? `${fmtDate(from)} – ${fmtDate(to)}` : fmtDate(anchor)}</Text>
         </Space>
+        )}
 
-        {loading ? <Card loading /> : mode === 'semana' ? (
+        {mode === 'buscar' ? (
+          <div>
+            <Input
+              allowClear
+              autoFocus
+              placeholder="Buscar en tus clases… (p. ej. writing página 34)"
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              style={{ maxWidth: 520, marginBottom: 12 }}
+            />
+            {!q.trim() ? <Text type="secondary">Escribe para buscar en el contenido de tus clases.</Text> :
+              searching ? <Card loading /> :
+              results.length === 0 ? <Text type="secondary">Sin resultados para «{q.trim()}».</Text> :
+              <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                {results.map((r, i) => (
+                  <Card key={i} size="small" hoverable onClick={() => openResult(r)} style={{ cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                      <span style={{ fontWeight: 600 }}>
+                        <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: r.color || '#579172', marginRight: 6 }} />
+                        {r.groupName}
+                        <span style={{ color: sectionColor(r.sectionName), marginLeft: 8 }}>· {r.sectionName}</span>
+                        {r.isDone ? ' ✓' : ''}
+                      </span>
+                      <Text type="secondary">{fmtDate(r.date)}</Text>
+                    </div>
+                    <div style={{ fontSize: 13, marginTop: 4, whiteSpace: 'pre-wrap' }}>{renderSnippet(r.snippet || r.content)}</div>
+                  </Card>
+                ))}
+              </Space>}
+          </div>
+        ) : loading ? <Card loading /> : mode === 'semana' ? (
           <div style={{ overflowX: 'auto' }}>
             <div style={{ display: 'flex', gap: 8, minWidth: 7 * 148 }}>
               {weekCols.map(d => (
@@ -5716,7 +5772,7 @@ function HistoryDrawer({ open, onClose }: { open: boolean; onClose: () => void }
 // ----------------------------- APP -----------------------------
 export default function App() {
   const [user, setUser] = useState<any>(null);
-  const [view, setView] = useState('organizacion');
+  const [view, setView] = useState(() => localStorage.getItem('secretaria_view') || 'organizacion');
   const [historyOpen, setHistoryOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [ready, setReady] = useState(false);
@@ -5802,7 +5858,7 @@ export default function App() {
       <span style={{ fontWeight: 700, fontSize: 17, fontFamily: "'Lora', Georgia, serif", color: '#1E1E30' }}>Secretaría</span>
     </div>
   );
-  const navMenu = <Menu mode="inline" selectedKeys={[safeView]} defaultOpenKeys={openGroup ? [openGroup] : []} items={items} onClick={(e) => { setView(e.key); setNavOpen(false); }} />;
+  const navMenu = <Menu mode="inline" selectedKeys={[safeView]} defaultOpenKeys={openGroup ? [openGroup] : []} items={items} onClick={(e) => { setView(e.key); localStorage.setItem('secretaria_view', e.key); setNavOpen(false); }} />;
   return (
    <SearchContext.Provider value={search}>
     <Layout style={{ minHeight: '100vh' }}>

@@ -165,6 +165,31 @@ export class NotebookController {
     return { ok: true };
   }
 
+  // ---- Búsqueda de texto: encuentra entradas por su contenido (full-text español) ----
+  // Inteligente por palabras: "writing página 34" encuentra entradas con esas palabras (y variantes).
+  @Get('search')
+  async search(@Req() req: any, @Query('q') q?: string, @Query('limit') limit?: string) {
+    const query = (q || '').trim();
+    if (!query) return [];
+    const lim = Math.min(Math.max(parseInt(limit || '50', 10) || 50, 1), 100);
+    const teacherId = isOnlyTeacher(req.user)
+      ? ((await teacherIdOf(this.ds, req.user.id)) || '00000000-0000-0000-0000-000000000000')
+      : null;
+    return this.ds.query(`
+      SELECT to_char(e.date,'YYYY-MM-DD') AS date, e.is_done AS "isDone",
+             g.id AS "groupId", g.name AS "groupName", g.color AS "color",
+             s.name AS "sectionName", e.content,
+             ts_headline('spanish', e.content, websearch_to_tsquery('spanish', $1),
+               'StartSel=[[HL]],StopSel=[[/HL]],MaxFragments=2,MaxWords=18,MinWords=5') AS snippet
+      FROM secretaria.notebook_entries e
+      JOIN secretaria.notebook_sections s ON s.id = e.section_id
+      JOIN secretaria.groups g ON g.id = e.group_id
+      WHERE to_tsvector('spanish', COALESCE(e.content,'')) @@ websearch_to_tsquery('spanish', $1)
+        AND ($2::uuid IS NULL OR g.teacher_id=$2)
+      ORDER BY e.date DESC
+      LIMIT $3`, [query, teacherId, lim]);
+  }
+
   // ---- Vista POR DÍA: todas las clases del docente ese día ----
   @Get('day')
   async day(@Req() req: any, @Query('date') date: string) {

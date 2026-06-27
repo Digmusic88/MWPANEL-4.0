@@ -310,10 +310,39 @@ function EventosPanel() {
   const today = new Date().toISOString().slice(0, 10);
   const [items, setItems] = useState<any[]>([]);
   const [sel, setSel] = useState(today);
+  // Rango ya cargado (acumulativo). Se carga de inicio un rango amplio que cubre
+  // todo el curso (≈hoy−2 meses → hoy+14 meses) para que festivos/vacaciones/
+  // simulacros aparezcan automáticamente, y se amplía al navegar fuera de él.
+  const loaded = useRef<{ from: string; to: string } | null>(null);
+  const fetchRange = (from: string, to: string) => {
+    api.get('/eventos/agenda', { params: { from, to } })
+      .then(r => setItems(prev => {
+        const map = new Map<string, any>();
+        [...prev, ...r.data].forEach((e: any, i: number) => map.set(e.id || `${e.type}-${e.date}-${i}`, e));
+        return Array.from(map.values());
+      }))
+      .catch(() => {});
+  };
+  const ensureRange = (from: string, to: string) => {
+    const cur = loaded.current;
+    const nf = !cur || from < cur.from ? from : cur.from;
+    const nt = !cur || to > cur.to ? to : cur.to;
+    if (cur && nf === cur.from && nt === cur.to) return; // ya cubierto
+    loaded.current = { from: nf, to: nt };
+    fetchRange(from, to);
+  };
   useEffect(() => {
-    const to = new Date(Date.now() + 60 * 864e5).toISOString().slice(0, 10);
-    api.get('/eventos/agenda', { params: { from: today, to } }).then(r => setItems(r.data)).catch(() => {});
+    const from = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10);
+    const to = new Date(Date.now() + 425 * 864e5).toISOString().slice(0, 10);
+    ensureRange(from, to);
   }, []);
+  // Al navegar de mes en el calendario, asegurar que el mes visible (con margen)
+  // esté cargado; si cae fuera del rango ya pedido, se solicita la extensión.
+  const onPanelChange = (d: any) => {
+    const from = d.startOf('month').subtract(1, 'month').format('YYYY-MM-DD');
+    const to = d.endOf('month').add(1, 'month').format('YYYY-MM-DD');
+    ensureRange(from, to);
+  };
   // Filtro de tipos por leyenda (clic para ocultar/mostrar); se guarda en el navegador.
   const [hidden, setHidden] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem('eventos_hidden_types') || '[]')); } catch { return new Set(); } });
   const toggleType = (k: string) => setHidden(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); localStorage.setItem('eventos_hidden_types', JSON.stringify([...n])); return n; });
@@ -339,6 +368,7 @@ function EventosPanel() {
       <Col xs={24} md={13}>
         <Card size="small" title={<span><CalendarOutlined /> Calendario</span>} styles={{ body: { padding: 8 } }}>
           <Calendar fullscreen={false} onSelect={(d: any) => setSel(d.format('YYYY-MM-DD'))}
+            onPanelChange={onPanelChange}
             cellRender={(d: any, info: any) => {
               if (info.type !== 'date') return null;
               const evs = byDate[d.format('YYYY-MM-DD')]; if (!evs) return null;

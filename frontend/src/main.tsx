@@ -2,7 +2,14 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ConfigProvider } from 'antd';
 import esES from 'antd/locale/es_ES';
+import dayjs from 'dayjs';
+import 'dayjs/locale/es';
 import App from './App';
+
+// La semana empieza en lunes: el <Calendar> de antd deriva el primer día de
+// la semana de la locale de dayjs (es → weekStart 1). Sin esto quedaría en
+// domingo (default 'en'), aunque antd ConfigProvider ya esté en es_ES.
+dayjs.locale('es');
 import { RealtimeProvider } from './realtime/RealtimeProvider';
 import './index.css';
 

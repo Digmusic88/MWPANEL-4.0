@@ -1,4 +1,4 @@
-import { Controller, Post, UseGuards, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { Controller, Post, UseGuards, UseInterceptors, UploadedFile, Body, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { SecretariaAuthGuard, Roles } from '../../common/secretaria-auth.guard';
 import { InscriptionService } from './inscription.service';
@@ -18,5 +18,12 @@ export class InscriptionController {
     } catch (e: any) {
       throw new BadRequestException(e?.message || 'No se pudo leer el PDF');
     }
+  }
+
+  @Post('commit')
+  @Roles('secretaria_admin', 'direccion')
+  async commit(@Body() body: { payload: any; academicYearId: string; confirmedDuplicateId?: string | null }) {
+    if (!body?.payload) throw new BadRequestException('Falta el payload de inscripción');
+    return this.svc.commit(body.payload, body.academicYearId, body.confirmedDuplicateId);
   }
 }

@@ -6118,7 +6118,6 @@ export default function App() {
           {safeView === 'familias' && <Familias />}
           {safeView === 'tarifas' && <Tarifas />}
           {safeView === 'importar' && <Importador />}
-          {safeView === 'inscripcion-pdf' && <InscripcionPdf />}
           {safeView === 'eventos' && <Eventos />}
           {safeView === 'reuniones' && <Reuniones user={user} />}
           {safeView === 'cuaderno' && <Cuaderno user={user} />}

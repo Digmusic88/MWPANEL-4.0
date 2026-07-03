@@ -78,7 +78,8 @@ Todo dentro de una transacción **por fila** (una fila que falla revierte solo l
 - 🟢 vinculado → la familia ya existe en Secretaría. Para cada tutor de MW Panel:
   - Emparejar por **nombre normalizado** contra los tutores de esa familia.
   - Casa → rellenar solo huecos (`phone`, `email` vacíos).
-  - No casa → **añadir** el tutor a la familia y marcar el alumno pendiente (`"tutor añadido, verificar"`).
+  - No casa **y la familia ya tiene tutores** → **NO añadir** (un padre ya registrado con otra grafía *sí está* → no es dato ausente). *(Decisión de producto en el E2E 2026-07-04: las familias de Escuela Alternativa ya tienen tutores; añadirlos duplicaría padres.)*
+  - Familia **sin ningún tutor** (o alumno 🔵 nuevo) → insertar el juego completo de tutores de MW Panel.
 
 ### Marcado pendiente
 Dos columnas nuevas en `secretaria.students` (terreno propio, no afecta SP-7):

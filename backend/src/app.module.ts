@@ -14,6 +14,7 @@ import { LevelTestsModule } from './modules/level-tests/level-tests.module';
 import { TaperModule } from './modules/taper/taper.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { ImportModule } from './modules/import/import.module';
+import { InscriptionModule } from './modules/inscription/inscription.module';
 import { RafflesModule } from './modules/raffles/raffles.module';
 import { TeachersModule } from './modules/teachers/teachers.module';
 import { AttendanceModule } from './modules/attendance/attendance.module';
@@ -49,7 +50,7 @@ import { AuthModule } from './modules/auth/auth.module';
       autoLoadEntities: true,
       synchronize: false, // las tablas se gestionan por migraciones SQL
     }),
-    AuthModule, CatalogModule, FamiliesModule, StudentsModule, FeeSchedulesModule, EnrollmentsModule, PaymentsModule, SepaModule, DocumentsModule, ScheduleSlotsModule, LevelTestsModule, TaperModule, ReportsModule, ImportModule, RafflesModule, TeachersModule, AttendanceModule, MocksModule, ChatModule, AccessModule, ApoyoModule, StatsModule, HistoryModule, TareasModule, ExamenesModule, EventosModule, MeetingsModule, CalendarioModule, NotebookModule, RealtimeModule, DanzaModule, MocksSyncModule,
+    AuthModule, CatalogModule, FamiliesModule, StudentsModule, FeeSchedulesModule, EnrollmentsModule, PaymentsModule, SepaModule, DocumentsModule, ScheduleSlotsModule, LevelTestsModule, TaperModule, ReportsModule, ImportModule, InscriptionModule, RafflesModule, TeachersModule, AttendanceModule, MocksModule, ChatModule, AccessModule, ApoyoModule, StatsModule, HistoryModule, TareasModule, ExamenesModule, EventosModule, MeetingsModule, CalendarioModule, NotebookModule, RealtimeModule, DanzaModule, MocksSyncModule,
   ],
   controllers: [HealthController],
 })

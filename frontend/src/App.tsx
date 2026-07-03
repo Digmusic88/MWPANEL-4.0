@@ -903,6 +903,31 @@ function FichaAlumno({ studentId, open, onClose }: { studentId?: string; open: b
       message.error(e?.response?.data?.message || 'No se pudo eliminar el override');
     }
   };
+  const [provOpen, setProvOpen] = useState(false);
+  const [levels, setLevels] = useState<any[]>([]);
+  const [levelId, setLevelId] = useState<string | undefined>();
+  const [provLoading, setProvLoading] = useState(false);
+  const openProvision = async () => {
+    setProvOpen(true);
+    if (!levels.length) { try { const r = await api.get('/provisioning/levels'); setLevels(r.data); } catch {} }
+  };
+  const doProvision = async () => {
+    if (!levelId) { message.warning('Elige el nivel educativo'); return; }
+    setProvLoading(true);
+    try {
+      const r = await api.post(`/provisioning/${studentId}`, { educationalLevelId: levelId });
+      const st = r.data?.status;
+      if (st === 'created') { message.success(`Cuenta creada. Login del alumno: ${r.data.studentLoginEmail}. No se ha enviado ningún email.`); }
+      else if (st === 'already') { message.info('El alumno ya tenía cuenta en MW Panel'); }
+      else if (st === 'blocked') { message.warning((r.data.blockers || []).join(' · ')); }
+      else { message.error(r.data?.message || 'No se pudo crear la cuenta'); }
+      if (st === 'created' || st === 'already') {
+        setProvOpen(false);
+        const rr = await api.get(`/students/${studentId}/ficha`); setData(rr.data); // refrescar chip
+      }
+    } catch (e: any) { message.error(e?.response?.data?.message || 'No se pudo crear la cuenta'); }
+    finally { setProvLoading(false); }
+  };
   const s = data?.student;
   const at = data?.attendance, tk = data?.tasks;
   const attPct = at?.total ? Math.round(((at.presente + at.retraso) / at.total) * 100) : null;
@@ -1023,6 +1048,21 @@ function FichaAlumno({ studentId, open, onClose }: { studentId?: string; open: b
               La remesa SEPA cobra a la cuenta de la familia. La cuenta propia es informativa, para un pago o transferencia especial de este alumno.
             </Typography.Text>
           </div>
+        ))}
+
+        {card('Acceso a la plataforma (MW Panel)', (
+          s?.mwpanelStudentId
+            ? <Tag color="purple">Cuenta MW Panel creada</Tag>
+            : <>
+                <Button type="primary" loading={provLoading} onClick={openProvision}>Crear cuenta de acceso en MW Panel</Button>
+                <Modal title="Crear cuenta de acceso en MW Panel" open={provOpen} onCancel={() => setProvOpen(false)}
+                  confirmLoading={provLoading} onOk={doProvision} okText="Crear cuenta">
+                  <Alert type="info" showIcon style={{ marginBottom: 12 }}
+                    message="Se crean las cuentas del alumno y de los padres en MW Panel. NO se envía ningún email; las credenciales se mandan luego, aparte." />
+                  <Select style={{ width: '100%' }} placeholder="Nivel educativo" value={levelId} onChange={setLevelId}
+                    options={levels.map((l: any) => ({ value: l.id, label: l.name }))} />
+                </Modal>
+              </>
         ))}
       </>)}
     </Drawer>

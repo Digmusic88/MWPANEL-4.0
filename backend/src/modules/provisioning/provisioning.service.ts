@@ -17,10 +17,6 @@ export interface ProvisionResult { status: ProvisionStatus; mwpanelStudentId?: s
 function randomPassword(): string {
   return 'Mw' + Math.random().toString(36).slice(2, 10) + '9';
 }
-function genEnrollmentNumber(): string {
-  return `MW-${new Date().getFullYear()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-}
-
 @Injectable()
 export class ProvisioningService {
   private adminId: string | null = null;
@@ -50,7 +46,7 @@ export class ProvisioningService {
       const guardians: MapGuardian[] = s.familyId ? await this.ds.query(
         `SELECT full_name AS "fullName", email, phone, is_primary_contact AS "isPrimary" FROM secretaria.guardians WHERE family_id=$1`, [s.familyId]) : [];
 
-      const enrollmentNumber = genEnrollmentNumber();
+      const enrollmentNumber = ''; // vacío → MW Panel auto-genera uno con formato válido y único
       const token = signAdminToken(await this.getAdminId());
 
       for (let suffix = 0; suffix <= 5; suffix++) {
@@ -67,7 +63,8 @@ export class ProvisioningService {
         if (res.status === 201) {
           const mwStudentId = res.body?.student?.id;
           const mwFamilyId = res.body?.family?.id;
-          if (mwStudentId) await this.ds.query(`UPDATE secretaria.students SET mwpanel_student_id=$2 WHERE id=$1`, [studentId, mwStudentId]);
+          if (!mwStudentId) return { status: 'error', message: 'MW Panel creó la cuenta pero no devolvió el identificador; verifica en MW Panel antes de reintentar' };
+          await this.ds.query(`UPDATE secretaria.students SET mwpanel_student_id=$2 WHERE id=$1`, [studentId, mwStudentId]);
           if (mwFamilyId && s.familyId) await this.ds.query(`UPDATE secretaria.families SET mwpanel_family_id=COALESCE(mwpanel_family_id,$2) WHERE id=$1`, [s.familyId, mwFamilyId]);
           return { status: 'created', mwpanelStudentId: mwStudentId, mwpanelFamilyId: mwFamilyId, studentLoginEmail: dto.student.email };
         }

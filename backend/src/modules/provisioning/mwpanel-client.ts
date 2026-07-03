@@ -10,12 +10,17 @@ export function signAdminToken(adminUserId: string): string {
 export interface EnrollmentHttpResult { status: number; body: any }
 
 export async function postEnrollment(dto: any, token: string): Promise<EnrollmentHttpResult> {
-  const res = await fetch(`${MWPANEL_API}/enrollment`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(dto),
-  });
-  let body: any = null;
-  try { body = await res.json(); } catch { body = null; }
-  return { status: res.status, body };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(`${MWPANEL_API}/enrollment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(dto),
+      signal: controller.signal,
+    });
+    let body: any = null;
+    try { body = await res.json(); } catch { body = null; }
+    return { status: res.status, body };
+  } finally { clearTimeout(timer); }
 }

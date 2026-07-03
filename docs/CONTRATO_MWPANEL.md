@@ -10,8 +10,11 @@
 
 - **Unidireccional, vía base de datos compartida** (mismo Postgres `mw-panel-db-prod`).
   Secretaría (schema `secretaria`) **consume** datos de MW Panel (schema `public`).
-- **MW Panel NO depende de Secretaría** (0 referencias en su backend). No existe
-  cliente REST en ninguna dirección; toda la integración es SQL cross-schema.
+- **MW Panel NO depende de Secretaría** (0 referencias en su backend). Toda la
+  integración de lectura es SQL cross-schema. Desde Feature 1c (2026-07-04),
+  Secretaría sí hace UNA llamada REST saliente hacia MW Panel
+  (`POST /api/enrollment`, aprovisionamiento de cuentas); ver detalle al final
+  de este documento.
 
 ## Superficie del contrato (lo que Secretaría lee de `public.*`)
 

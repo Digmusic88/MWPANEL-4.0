@@ -24,6 +24,7 @@ describe('buildEnrollmentDto', () => {
     expect(dto!.student).toEqual({ firstName: 'Ana', lastName: 'Gomez', email: 'ana.gomez@mw.com', password: 'Pass1234', birthDate: '2018-03-05', enrollmentNumber: 'MW-2026-ABC', educationalLevelId: 'LVL' });
     expect(dto!.family.primaryContact).toEqual({ firstName: 'Maria', lastName: 'Gomez', email: 'maria@x.com', password: 'Prim1234', phone: '600111222' });
     expect(dto!.family.secondaryContact).toEqual({ firstName: 'Juan', lastName: 'Perez Ruiz', email: 'juan@x.com', password: 'Seco1234', phone: '000000000' });
+    expect(dto!.family.relationship).toBe('parent');
   });
   it('aplica emailSuffix al alumno', () => {
     const { dto } = buildEnrollmentDto({ firstName: 'Ana', lastName: 'Gomez', birthDate: '2018-03-05' }, guardians, { ...OPTS, emailSuffix: 3 });

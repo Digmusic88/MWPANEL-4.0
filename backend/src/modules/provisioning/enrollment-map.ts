@@ -4,7 +4,7 @@ export interface MapOpts { educationalLevelId: string; enrollmentNumber: string;
 export interface EnrollmentContact { firstName: string; lastName?: string; email: string; password: string; phone: string }
 export interface EnrollmentDto {
   student: { firstName: string; lastName: string; email: string; password: string; birthDate?: string; enrollmentNumber: string; educationalLevelId: string };
-  family: { primaryContact: EnrollmentContact; secondaryContact?: EnrollmentContact };
+  family: { primaryContact: EnrollmentContact; secondaryContact?: EnrollmentContact; relationship: string };
 }
 
 export function slug(s: string): string {
@@ -45,7 +45,7 @@ export function buildEnrollmentDto(student: MapStudent, guardians: MapGuardian[]
       enrollmentNumber: opts.enrollmentNumber,
       educationalLevelId: opts.educationalLevelId,
     },
-    family: { primaryContact: toContact(primary, opts.primaryPassword) },
+    family: { primaryContact: toContact(primary, opts.primaryPassword), relationship: 'parent' },
   };
   if (secondary) dto.family.secondaryContact = toContact(secondary, opts.secondaryPassword);
   return { dto, blockers: [] };

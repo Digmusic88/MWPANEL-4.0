@@ -5,6 +5,7 @@ import { MwGuardianSrc } from './backfill-plan';
 export interface MwStudentSrc {
   mwStudentId: string; firstName: string; lastName: string;
   birthDate: string | null; address: string | null; enrollmentNumber: string | null;
+  mwFamilyId: string | null;
   guardians: MwGuardianSrc[];
 }
 export interface SecStudentRow { id: string; firstName: string; lastName: string; birthDate: string | null }
@@ -16,10 +17,12 @@ export async function readActiveMwStudents(ds: DataSource): Promise<MwStudentSrc
            COALESCE(p."lastName",'')  AS "lastName",
            to_char(s."birthDate", 'YYYY-MM-DD') AS "birthDate",
            NULLIF(p.address,'') AS address,
-           NULLIF(s."enrollmentNumber",'') AS "enrollmentNumber"
+           NULLIF(s."enrollmentNumber",'') AS "enrollmentNumber",
+           (SELECT fs."familyId" FROM public.family_students fs WHERE fs."studentId" = s.id LIMIT 1) AS "mwFamilyId"
     FROM public.students s
     JOIN public.users u ON u.id = s."userId" AND u."isActive" = true
     LEFT JOIN public.user_profiles p ON p."userId" = s."userId"
+    WHERE NOT EXISTS (SELECT 1 FROM secretaria.students ss WHERE ss.mwpanel_student_id = s.id)
     ORDER BY s.id
   `);
   // tutores por alumno: primary + secondary contact de la familia

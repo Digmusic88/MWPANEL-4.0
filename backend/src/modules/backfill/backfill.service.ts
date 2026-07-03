@@ -97,6 +97,8 @@ export class BackfillService {
   }
 
   private async applyLink(m: any, mw: MwStudentSrc, targetId: string): Promise<{ created: boolean; pending: boolean }> {
+    const exists = await m.query(`SELECT 1 FROM secretaria.students WHERE id=$1`, [targetId]);
+    if (!exists.length) throw new Error('Alumno de Secretaría destino no encontrado');
     const secState = await this.secStateForTx(m, targetId);
     const sp = buildStudentFillPlan(mw, secState.student);
     // 1) rellenar campos de alumno solo-si-vacío + fijar enlace
@@ -128,8 +130,8 @@ export class BackfillService {
   private async applyCreate(m: any, mw: MwStudentSrc): Promise<{ created: boolean; pending: boolean }> {
     // familia
     const familyId = (await m.query(
-      `INSERT INTO secretaria.families(display_name, mwpanel_family_id) VALUES ($1, NULL) RETURNING id`,
-      [mw.lastName || 'Familia'],
+      `INSERT INTO secretaria.families(display_name, mwpanel_family_id) VALUES ($1, $2) RETURNING id`,
+      [mw.lastName || 'Familia', mw.mwFamilyId],
     ))[0].id;
     const gp = planGuardians(mw.guardians, null);
     for (const g of gp.toInsert) await m.query(

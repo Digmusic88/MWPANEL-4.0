@@ -4453,6 +4453,7 @@ function InscripcionPdf() {
   const [loading, setLoading] = React.useState(false);
   const [years, setYears] = React.useState<any[]>([]);
   const [yearId, setYearId] = React.useState<string | undefined>();
+  const [linkExisting, setLinkExisting] = React.useState(false);
   const [form] = Form.useForm();
 
   React.useEffect(() => { api.get('/catalog/years').then((r) => {
@@ -4467,6 +4468,7 @@ function InscripcionPdf() {
       const fd = new FormData(); fd.append('file', file);
       const r = await api.post('/inscription/preview', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setPreview(r.data);
+      setLinkExisting(false); // cada preview reinicia la decisión de duplicado
       form.setFieldsValue(r.data); // rellena el formulario editable
     } catch (e: any) { message.error(e?.response?.data?.message || 'No se pudo leer el PDF'); }
     finally { setLoading(false); }
@@ -4477,9 +4479,10 @@ function InscripcionPdf() {
     if (!yearId) { message.warning('Elige el curso académico'); return; }
     setLoading(true);
     try {
-      const r = await api.post('/inscription/commit', { payload: edited, academicYearId: yearId, confirmedDuplicateId: null });
-      message.success(r.data.created ? 'Alumno preinscrito creado' : 'Vinculado a alumno existente');
-      setPreview(null); setFile(null); form.resetFields();
+      const confirmedDuplicateId = linkExisting ? (preview?.duplicateCandidateId || null) : null;
+      const r = await api.post('/inscription/commit', { payload: edited, academicYearId: yearId, confirmedDuplicateId });
+      message.success(r.data.created ? 'Alumno preinscrito creado' : 'El alumno ya existía: no se creó duplicado');
+      setPreview(null); setFile(null); setLinkExisting(false); form.resetFields();
     } catch (e: any) { message.error(e?.response?.data?.message || 'No se pudo crear el alta'); }
     finally { setLoading(false); }
   };
@@ -4495,6 +4498,16 @@ function InscripcionPdf() {
       {preview && (
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
           {preview.warnings?.length > 0 && <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={<ul style={{ margin: 0 }}>{preview.warnings.map((w: string, i: number) => <li key={i}>{w}</li>)}</ul>} />}
+          {preview.duplicateCandidateId && (
+            <Alert type="error" showIcon style={{ marginBottom: 12 }}
+              message="Posible alumno duplicado"
+              description={
+                <Space>
+                  <span>Ya existe un alumno con ese nombre y fecha de nacimiento. ¿Es el mismo?</span>
+                  <Switch checked={linkExisting} onChange={setLinkExisting} checkedChildren="Vincular al existente" unCheckedChildren="Crear nuevo" />
+                </Space>
+              } />
+          )}
           <Divider orientation="left">Alumno</Divider>
           <Form.Item name={['student','firstName']} label="Nombre"><Input /></Form.Item>
           <Form.Item name={['student','lastName']} label="Apellidos"><Input /></Form.Item>
@@ -4520,8 +4533,8 @@ function InscripcionPdf() {
             <Select value={yearId} onChange={setYearId} style={{ width: 220 }}
               options={years.map((y) => ({ value: y.id, label: y.label + (y.isActive ? ' (activo)' : '') }))} />
           </Form.Item>
-          <Popconfirm title="¿Crear el alta como preinscrito?" onConfirm={doCommit}>
-            <Button type="primary" loading={loading}>Confirmar alta</Button>
+          <Popconfirm title={linkExisting && preview.duplicateCandidateId ? 'El alumno ya existe: no se creará un alumno nuevo. ¿Continuar?' : '¿Crear el alta como preinscrito?'} onConfirm={doCommit}>
+            <Button type="primary" loading={loading}>{linkExisting && preview.duplicateCandidateId ? 'Es el mismo alumno (no crear)' : 'Confirmar alta'}</Button>
           </Popconfirm>
         </Form>
       )}

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo, createContext, useContext } from 'react';
 import {
   Layout, Menu, Button, Form, Input, Card, Typography, message, Alert, Table, Modal,
-  Select, InputNumber, Tag, Space, Tooltip, Statistic, Row, Col, Popconfirm, Switch, Checkbox, Dropdown, Empty, Progress, Drawer, Calendar, Badge, Grid, Tabs, Radio,
+  Select, InputNumber, Tag, Space, Tooltip, Statistic, Row, Col, Popconfirm, Switch, Checkbox, Dropdown, Empty, Progress, Drawer, Calendar, Badge, Grid, Tabs, Radio, Divider,
 } from 'antd';
 import {
   DashboardOutlined, TeamOutlined, UserAddOutlined, EuroOutlined, LogoutOutlined,
@@ -2551,6 +2551,7 @@ function Configuracion({ user }: { user?: any }) {
   );
   if (isAdmin) tabs.push(
     { key: 'importar', label: 'Importar Excel', children: <Importador /> },
+    { key: 'inscripcion-pdf', label: 'Importar inscripción PDF', children: <InscripcionPdf /> },
     { key: 'equipo', label: 'Accesos / Equipo', children: <Equipo /> },
   );
 
@@ -4446,6 +4447,88 @@ function Importador() {
   );
 }
 
+function InscripcionPdf() {
+  const [file, setFile] = React.useState<File | null>(null);
+  const [preview, setPreview] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [years, setYears] = React.useState<any[]>([]);
+  const [yearId, setYearId] = React.useState<string | undefined>();
+  const [form] = Form.useForm();
+
+  React.useEffect(() => { api.get('/catalog/years').then((r) => {
+    setYears(r.data);
+    const active = r.data.find((y: any) => y.isActive); if (active) setYearId(active.id);
+  }); }, []);
+
+  const doPreview = async () => {
+    if (!file) return;
+    setLoading(true);
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const r = await api.post('/inscription/preview', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setPreview(r.data);
+      form.setFieldsValue(r.data); // rellena el formulario editable
+    } catch (e: any) { message.error(e?.response?.data?.message || 'No se pudo leer el PDF'); }
+    finally { setLoading(false); }
+  };
+
+  const doCommit = async () => {
+    const edited = form.getFieldsValue(true);
+    if (!yearId) { message.warning('Elige el curso académico'); return; }
+    setLoading(true);
+    try {
+      const r = await api.post('/inscription/commit', { payload: edited, academicYearId: yearId, confirmedDuplicateId: null });
+      message.success(r.data.created ? 'Alumno preinscrito creado' : 'Vinculado a alumno existente');
+      setPreview(null); setFile(null); form.resetFields();
+    } catch (e: any) { message.error(e?.response?.data?.message || 'No se pudo crear el alta'); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div>
+      <Alert type="info" showIcon style={{ marginBottom: 12 }}
+        message="Sube la inscripción PDF rellenada; revisa y corrige los datos extraídos antes de confirmar. El alta queda como 'preinscrito' en ESCUELA." />
+      <Space direction="vertical" style={{ width: '100%' }}>
+        <input type="file" accept=".pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+        <Button type="primary" loading={loading} disabled={!file} onClick={doPreview}>Previsualizar</Button>
+      </Space>
+      {preview && (
+        <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+          {preview.warnings?.length > 0 && <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={<ul style={{ margin: 0 }}>{preview.warnings.map((w: string, i: number) => <li key={i}>{w}</li>)}</ul>} />}
+          <Divider orientation="left">Alumno</Divider>
+          <Form.Item name={['student','firstName']} label="Nombre"><Input /></Form.Item>
+          <Form.Item name={['student','lastName']} label="Apellidos"><Input /></Form.Item>
+          <Form.Item name={['student','birthDate']} label="Fecha nacimiento (YYYY-MM-DD)"><Input /></Form.Item>
+          <Form.Item name={['student','address']} label="Dirección"><Input /></Form.Item>
+          <Form.Item name={['student','medicalText']} label="Datos médicos (se cifran)"><Input.TextArea rows={3} /></Form.Item>
+          <Form.Item name={['student','photoConsent']} label="Autoriza uso de imagen" valuePropName="checked"><Switch /></Form.Item>
+          <Form.Item name={['student','exitConsent']} label="Autoriza salidas" valuePropName="checked"><Switch /></Form.Item>
+          <Form.Item name={['student','notes']} label="Notas"><Input.TextArea rows={2} /></Form.Item>
+          <Divider orientation="left">Tutores</Divider>
+          <Form.List name="guardians">
+            {(fields) => fields.map((fld) => (
+              <Space key={fld.key} wrap>
+                <Form.Item name={[fld.name,'fullName']} label="Nombre"><Input /></Form.Item>
+                <Form.Item name={[fld.name,'relationship']} label="Relación"><Select style={{ width: 120 }} options={[{value:'madre'},{value:'padre'},{value:'tutor'},{value:'otro'}]} /></Form.Item>
+                <Form.Item name={[fld.name,'phone']} label="Teléfono"><Input /></Form.Item>
+                <Form.Item name={[fld.name,'email']} label="Email"><Input /></Form.Item>
+              </Space>
+            ))}
+          </Form.List>
+          <Divider orientation="left">Inscripción</Divider>
+          <Form.Item label="Curso académico">
+            <Select value={yearId} onChange={setYearId} style={{ width: 220 }}
+              options={years.map((y) => ({ value: y.id, label: y.label + (y.isActive ? ' (activo)' : '') }))} />
+          </Form.Item>
+          <Popconfirm title="¿Crear el alta como preinscrito?" onConfirm={doCommit}>
+            <Button type="primary" loading={loading}>Confirmar alta</Button>
+          </Popconfirm>
+        </Form>
+      )}
+    </div>
+  );
+}
+
 // ----------------------------- HORARIO POR AULAS (estilo Excel, arrastrable) -----------------------------
 const HA_DAYS = [1, 2, 3, 4, 5];
 const HA_DAYNAMES = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
@@ -6035,6 +6118,7 @@ export default function App() {
           {safeView === 'familias' && <Familias />}
           {safeView === 'tarifas' && <Tarifas />}
           {safeView === 'importar' && <Importador />}
+          {safeView === 'inscripcion-pdf' && <InscripcionPdf />}
           {safeView === 'eventos' && <Eventos />}
           {safeView === 'reuniones' && <Reuniones user={user} />}
           {safeView === 'cuaderno' && <Cuaderno user={user} />}

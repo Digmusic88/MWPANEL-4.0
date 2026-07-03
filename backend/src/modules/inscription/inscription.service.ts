@@ -36,7 +36,9 @@ export class InscriptionService {
     if (confirmedDuplicateId) return { studentId: confirmedDuplicateId, created: false };
     const s = payload.student;
     if (!s.firstName || !s.lastName) throw new BadRequestException('Faltan nombre/apellidos del alumno');
+    if (!payload.family?.displayName) throw new BadRequestException('Falta el nombre de la familia');
     if (payload.student.medicalText && !CRYPTO_KEY) throw new BadRequestException('Falta SECRETARIA_CRYPTO_KEY en el servidor');
+    if (payload.bank?.iban && !CRYPTO_KEY) throw new BadRequestException('Falta SECRETARIA_CRYPTO_KEY en el servidor');
 
     return this.ds.transaction(async (m) => {
       // 1) Familia
@@ -47,7 +49,7 @@ export class InscriptionService {
       const familyId = famRows[0].id;
 
       // 2) Tutores
-      for (const guard of payload.guardians) {
+      for (const guard of payload.guardians || []) {
         await m.query(
           `INSERT INTO secretaria.guardians(family_id, full_name, relationship, phone, email, is_primary_contact)
            VALUES ($1,$2,$3::secretaria.guardian_relationship,$4,$5,$6)`,

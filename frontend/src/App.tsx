@@ -2552,6 +2552,7 @@ function Configuracion({ user }: { user?: any }) {
   if (isAdmin) tabs.push(
     { key: 'importar', label: 'Importar Excel', children: <Importador /> },
     { key: 'inscripcion-pdf', label: 'Importar inscripción PDF', children: <InscripcionPdf /> },
+    { key: 'backfill-mwpanel', label: 'Reconciliar MW Panel', children: <BackfillMwPanel /> },
     { key: 'equipo', label: 'Accesos / Equipo', children: <Equipo /> },
   );
 
@@ -4537,6 +4538,99 @@ function InscripcionPdf() {
             <Button type="primary" loading={loading}>{linkExisting && preview.duplicateCandidateId ? 'Es el mismo alumno (no crear)' : 'Confirmar alta'}</Button>
           </Popconfirm>
         </Form>
+      )}
+    </div>
+  );
+}
+
+function BackfillMwPanel() {
+  const [data, setData] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [checked, setChecked] = React.useState<Record<string, boolean>>({});   // reliable+new: aplicar sí/no
+  const [dubChoice, setDubChoice] = React.useState<Record<string, string>>({}); // mwStudentId → targetId | 'create' | 'skip'
+
+  const analyze = async () => {
+    setLoading(true);
+    try {
+      const r = await api.post('/backfill/preview', {});
+      setData(r.data);
+      const c: Record<string, boolean> = {};
+      [...r.data.reliable, ...r.data.new].forEach((row: any) => { c[row.mwStudentId] = true; });
+      setChecked(c);
+    } catch (e: any) { message.error(e?.response?.data?.message || 'No se pudo analizar'); }
+    finally { setLoading(false); }
+  };
+
+  const apply = async () => {
+    if (!data) return;
+    const decisions: any[] = [];
+    data.reliable.forEach((r: any) => { if (checked[r.mwStudentId]) decisions.push({ mwStudentId: r.mwStudentId, action: 'link', targetSecretariaId: r.targetSecretariaId }); });
+    data.new.forEach((r: any) => { if (checked[r.mwStudentId]) decisions.push({ mwStudentId: r.mwStudentId, action: 'create' }); });
+    data.dubious.forEach((r: any) => {
+      const ch = dubChoice[r.mwStudentId];
+      if (!ch || ch === 'skip') return;
+      if (ch === 'create') decisions.push({ mwStudentId: r.mwStudentId, action: 'create' });
+      else decisions.push({ mwStudentId: r.mwStudentId, action: 'link', targetSecretariaId: ch });
+    });
+    if (!decisions.length) { message.warning('No hay nada marcado para aplicar'); return; }
+    setLoading(true);
+    try {
+      const r = await api.post('/backfill/apply', { decisions });
+      message.success(`${r.data.linked} vinculados, ${r.data.created} creados, ${r.data.pending} pendientes`);
+      if (r.data.errors?.length) message.warning(`${r.data.errors.length} con error`);
+      await analyze();
+    } catch (e: any) { message.error(e?.response?.data?.message || 'No se pudo aplicar'); }
+    finally { setLoading(false); }
+  };
+
+  const rowLabel = (r: any) => `${r.firstName} ${r.lastName}`;
+
+  return (
+    <div>
+      <Alert type="info" showIcon style={{ marginBottom: 12 }}
+        message="Reconciliación con MW Panel: vincula alumnos ya existentes y crea los que falten, rellenando solo datos ausentes (Secretaría prevalece). Solo alumnos activos." />
+      <Button type="primary" loading={loading} onClick={analyze}>Analizar MW Panel</Button>
+      {data && (
+        <div style={{ marginTop: 16 }}>
+          <Space style={{ marginBottom: 12 }}>
+            <Tag color="green">Fiables: {data.counts.reliable}</Tag>
+            <Tag color="orange">Dudosas: {data.counts.dubious}</Tag>
+            <Tag color="blue">Nuevas: {data.counts.new}</Tag>
+          </Space>
+          <Divider orientation="left">🟢 Fiables (vincular + rellenar huecos)</Divider>
+          {data.reliable.map((r: any) => (
+            <div key={r.mwStudentId} style={{ marginBottom: 6 }}>
+              <Checkbox checked={!!checked[r.mwStudentId]} onChange={e => setChecked(s => ({ ...s, [r.mwStudentId]: e.target.checked }))}>
+                {rowLabel(r)} {r.birthDateMismatch && <Tag color="red">⚠ fecha difiere</Tag>}
+                {r.wouldFill.length > 0 && <span style={{ color: '#888' }}> · rellena: {r.wouldFill.join(', ')}</span>}
+                {r.pendingAfter.length > 0 && <Tag color="gold">pendiente: {r.pendingAfter.join('; ')}</Tag>}
+              </Checkbox>
+            </div>
+          ))}
+          <Divider orientation="left">🟡 Dudosas (decide)</Divider>
+          {data.dubious.map((r: any) => (
+            <div key={r.mwStudentId} style={{ marginBottom: 6 }}>
+              <span>{rowLabel(r)}: </span>
+              <Radio.Group value={dubChoice[r.mwStudentId]} onChange={e => setDubChoice(s => ({ ...s, [r.mwStudentId]: e.target.value }))}>
+                {(r.candidates || []).map((c: any) => <Radio key={c.secretariaId} value={c.secretariaId}>vincular a …{String(c.secretariaId).slice(0, 8)}{c.birthDateMismatch && ' ⚠'}</Radio>)}
+                <Radio value="create">crear nuevo</Radio>
+                <Radio value="skip">saltar</Radio>
+              </Radio.Group>
+            </div>
+          ))}
+          <Divider orientation="left">🔵 Nuevas (crear ficha + familia + tutores)</Divider>
+          {data.new.map((r: any) => (
+            <div key={r.mwStudentId} style={{ marginBottom: 6 }}>
+              <Checkbox checked={!!checked[r.mwStudentId]} onChange={e => setChecked(s => ({ ...s, [r.mwStudentId]: e.target.checked }))}>
+                {rowLabel(r)}
+                {r.pendingAfter.length > 0 && <Tag color="gold">pendiente: {r.pendingAfter.join('; ')}</Tag>}
+              </Checkbox>
+            </div>
+          ))}
+          <Popconfirm title="¿Aplicar los cambios marcados?" onConfirm={apply}>
+            <Button type="primary" loading={loading} style={{ marginTop: 12 }}>Aplicar seleccionados</Button>
+          </Popconfirm>
+        </div>
       )}
     </div>
   );

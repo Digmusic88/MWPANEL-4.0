@@ -43,7 +43,7 @@ const rel = (fullName: string): 'madre'|'padre'|'tutor'|'otro' => genderToRelati
 
 export function planGuardians(mwGuardians: MwGuardianSrc[], secGuardians: SecGuardianState[] | null): GuardianPlan {
   const plan: GuardianPlan = { toInsert: [], toFillPhone: [], toFillEmail: [], addedUnmatched: false };
-  if (secGuardians === null) {
+  if (secGuardians === null || secGuardians.length === 0) {
     plan.toInsert = mwGuardians.map(g => ({ fullName: g.fullName, relationship: rel(g.fullName), phone: g.phone, email: g.email, isPrimary: g.isPrimary }));
     return plan;
   }
@@ -52,8 +52,7 @@ export function planGuardians(mwGuardians: MwGuardianSrc[], secGuardians: SecGua
   for (const g of mwGuardians) {
     const match = secByName.get(normalizeName(g.fullName, ''));
     if (!match) {
-      plan.toInsert.push({ fullName: g.fullName, relationship: rel(g.fullName), phone: g.phone, email: g.email, isPrimary: false });
-      plan.addedUnmatched = true;
+      // La familia ya tiene tutores: no añadimos no-casados (serían duplicados casi seguros).
       continue;
     }
     if (empty(match.phone) && !empty(g.phone)) plan.toFillPhone.push({ id: match.id, phone: g.phone! });

@@ -28,13 +28,18 @@ describe('planGuardians', () => {
     expect(p.toInsert.map(g => g.relationship)).toEqual(['madre', 'padre']);
     expect(p.addedUnmatched).toBe(false);
   });
-  it('familia existente: casa por nombre y rellena solo huecos', () => {
+  it('familia existente: casa por nombre y rellena solo huecos (no añade no-casados)', () => {
     const sec = [{ id: 'G1', fullName: 'María Gómez', phone: null, email: 'm@x.com' }];
     const p = planGuardians(mw, sec);
     expect(p.toFillPhone).toEqual([{ id: 'G1', phone: '600111222' }]); // hueco de teléfono
     expect(p.toFillEmail).toEqual([]);                                  // email ya estaba
-    expect(p.toInsert.map(g => g.fullName)).toEqual(['Juan Perez']);    // el no casado se añade
-    expect(p.addedUnmatched).toBe(true);
+    expect(p.toInsert).toEqual([]);                                     // Juan Perez NO se añade (familia ya tiene tutores)
+    expect(p.addedUnmatched).toBe(false);
+  });
+  it('familia con array vacío de tutores inserta todos', () => {
+    const p = planGuardians(mw, []);
+    expect(p.toInsert.map(g => g.fullName)).toEqual(expect.arrayContaining(['Maria Gomez', 'Juan Perez']));
+    expect(p.addedUnmatched).toBe(false);
   });
 });
 

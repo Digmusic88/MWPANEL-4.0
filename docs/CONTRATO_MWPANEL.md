@@ -93,3 +93,16 @@ si el contrato se rompió (el deploy se completa igual).
    consumidor y actualiza este documento.
 2. ¿Añades en Secretaría un consumidor nuevo de datos de MW Panel? Amplía la
    superficie aquí y en `scripts/contract-check.sql`.
+
+## Llamada saliente Secretaría → MW Panel (Feature 1c, 2026-07-04)
+
+Secretaría **llama a la API REST de MW Panel** para crear cuentas de acceso
+(aprovisionamiento): `POST http://mw-panel-backend-prod:3000/api/enrollment`
+autenticado con un JWT de rol admin firmado con el **JWT_SECRET compartido**.
+No escribe `public.*` por SQL para esto: delega en `processEnrollment` de MW
+Panel (crea alumno+familia+cuentas, dedup por email). Acoplamientos:
+- Depende del contrato de `POST /api/enrollment` (campos de `CreateEnrollmentDto`)
+  y de que exista al menos un `public.users` con rol admin activo.
+- Depende de que el `JWT_SECRET` siga siendo el mismo en ambos servicios.
+- Tras crear, Secretaría guarda el `student.id` devuelto en
+  `secretaria.students.mwpanel_student_id`.

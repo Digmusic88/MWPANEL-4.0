@@ -4580,6 +4580,7 @@ function InscripcionPdf() {
   const [years, setYears] = React.useState<any[]>([]);
   const [yearId, setYearId] = React.useState<string | undefined>();
   const [linkExisting, setLinkExisting] = React.useState(false);
+  const [mergeInto, setMergeInto] = React.useState<string | null>(null);
   const [form] = Form.useForm();
 
   React.useEffect(() => { api.get('/catalog/years').then((r) => {
@@ -4595,6 +4596,7 @@ function InscripcionPdf() {
       const r = await api.post('/inscription/preview', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setPreview(r.data);
       setLinkExisting(false); // cada preview reinicia la decisión de duplicado
+      setMergeInto(null);     // y la de completar ficha existente
       form.setFieldsValue(r.data); // rellena el formulario editable
     } catch (e: any) { message.error(e?.response?.data?.message || 'No se pudo leer el PDF'); }
     finally { setLoading(false); }
@@ -4606,9 +4608,9 @@ function InscripcionPdf() {
     setLoading(true);
     try {
       const confirmedDuplicateId = linkExisting ? (preview?.duplicateCandidateId || null) : null;
-      const r = await api.post('/inscription/commit', { payload: edited, academicYearId: yearId, confirmedDuplicateId });
-      message.success(r.data.created ? 'Alumno preinscrito creado' : 'El alumno ya existía: no se creó duplicado');
-      setPreview(null); setFile(null); setLinkExisting(false); form.resetFields();
+      const r = await api.post('/inscription/commit', { payload: edited, academicYearId: yearId, confirmedDuplicateId, mergeIntoStudentId: mergeInto });
+      message.success(r.data.merged ? 'Ficha del alumno completada (sin duplicar)' : r.data.created ? 'Alumno preinscrito creado' : 'El alumno ya existía: no se creó duplicado');
+      setPreview(null); setFile(null); setLinkExisting(false); setMergeInto(null); form.resetFields();
     } catch (e: any) { message.error(e?.response?.data?.message || 'No se pudo crear el alta'); }
     finally { setLoading(false); }
   };
@@ -4632,6 +4634,28 @@ function InscripcionPdf() {
                   <span>Ya existe un alumno con ese nombre y fecha de nacimiento. ¿Es el mismo?</span>
                   <Switch checked={linkExisting} onChange={setLinkExisting} checkedChildren="Vincular al existente" unCheckedChildren="Crear nuevo" />
                 </Space>
+              } />
+          )}
+          {preview.placeholderCandidates?.length > 0 && (
+            <Alert type="warning" showIcon style={{ marginBottom: 12 }}
+              message="Alumno ya registrado con ficha incompleta"
+              description={
+                <div>
+                  <div style={{ marginBottom: 8 }}>
+                    Este alumno podría estar ya registrado (ficha sin apellidos). Si es el mismo,
+                    completa su ficha (solo se rellenan los campos vacíos) en vez de crear un duplicado:
+                  </div>
+                  <Radio.Group value={mergeInto ?? ''} onChange={(e) => setMergeInto(e.target.value || null)}>
+                    <Space direction="vertical">
+                      <Radio value="">Crear alumno nuevo</Radio>
+                      {preview.placeholderCandidates.map((c: any) => (
+                        <Radio key={c.id} value={c.id}>
+                          <b>{c.firstName}</b>{c.birthDate ? ` · nac. ${c.birthDate}` : ''}{c.services ? ` · ${c.services}` : ''}
+                        </Radio>
+                      ))}
+                    </Space>
+                  </Radio.Group>
+                </div>
               } />
           )}
           <Divider orientation="left">Alumno</Divider>
@@ -4660,8 +4684,8 @@ function InscripcionPdf() {
             <Select value={yearId} onChange={setYearId} style={{ width: 220 }}
               options={years.map((y) => ({ value: y.id, label: y.label + (y.isActive ? ' (activo)' : '') }))} />
           </Form.Item>
-          <Popconfirm title={linkExisting && preview.duplicateCandidateId ? 'El alumno ya existe: no se creará un alumno nuevo. ¿Continuar?' : '¿Crear el alta como preinscrito?'} onConfirm={doCommit}>
-            <Button type="primary" loading={loading}>{linkExisting && preview.duplicateCandidateId ? 'Es el mismo alumno (no crear)' : 'Confirmar alta'}</Button>
+          <Popconfirm title={mergeInto ? 'Se completará la ficha del alumno existente (solo campos vacíos), sin crear uno nuevo. ¿Continuar?' : linkExisting && preview.duplicateCandidateId ? 'El alumno ya existe: no se creará un alumno nuevo. ¿Continuar?' : '¿Crear el alta como preinscrito?'} onConfirm={doCommit}>
+            <Button type="primary" loading={loading}>{mergeInto ? 'Completar ficha existente' : linkExisting && preview.duplicateCandidateId ? 'Es el mismo alumno (no crear)' : 'Confirmar alta'}</Button>
           </Popconfirm>
         </Form>
       )}

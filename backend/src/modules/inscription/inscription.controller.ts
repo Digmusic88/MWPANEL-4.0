@@ -22,8 +22,8 @@ export class InscriptionController {
 
   @Post('commit')
   @Roles('secretaria_admin', 'direccion')
-  async commit(@Body() body: { payload: any; academicYearId: string; confirmedDuplicateId?: string | null }) {
+  async commit(@Body() body: { payload: any; academicYearId: string; confirmedDuplicateId?: string | null; mergeIntoStudentId?: string | null }) {
     if (!body?.payload) throw new BadRequestException('Falta el payload de inscripción');
-    return this.svc.commit(body.payload, body.academicYearId, body.confirmedDuplicateId);
+    return this.svc.commit(body.payload, body.academicYearId, body.confirmedDuplicateId, body.mergeIntoStudentId);
   }
 }

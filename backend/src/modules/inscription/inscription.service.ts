@@ -43,29 +43,30 @@ export class InscriptionService {
     return this.ds.transaction(async (m) => {
       // 1) Familia
       const famRows = await m.query(
-        `INSERT INTO secretaria.families(display_name, notes) VALUES ($1,$2) RETURNING id`,
-        [payload.family.displayName, payload.family.notes || null],
+        `INSERT INTO secretaria.families(display_name, siblings, notes) VALUES ($1,$2,$3) RETURNING id`,
+        [payload.family.displayName, payload.family.siblings || null, payload.family.notes || null],
       );
       const familyId = famRows[0].id;
 
       // 2) Tutores
       for (const guard of payload.guardians || []) {
         await m.query(
-          `INSERT INTO secretaria.guardians(family_id, full_name, relationship, nif, phone, email, is_primary_contact)
-           VALUES ($1,$2,$3::secretaria.guardian_relationship,$4,$5,$6,$7)`,
-          [familyId, guard.fullName, guard.relationship, guard.nif || null, guard.phone || null, guard.email || null, guard.isPrimary],
+          `INSERT INTO secretaria.guardians(family_id, full_name, relationship, nif, phone, email, profession, is_primary_contact)
+           VALUES ($1,$2,$3::secretaria.guardian_relationship,$4,$5,$6,$7,$8)`,
+          [familyId, guard.fullName, guard.relationship, guard.nif || null, guard.phone || null, guard.email || null, guard.profession || null, guard.isPrimary],
         );
       }
 
       // 3) Alumno (columnas de la entidad por SQL crudo para incluir médico/consentimientos)
       const stuRows = await m.query(
-        `INSERT INTO secretaria.students(family_id, first_name, last_name, birth_date, address, city, notes,
+        `INSERT INTO secretaria.students(family_id, first_name, last_name, birth_date, birth_place, email, phone, address, city, interests, notes,
            medical_notes_encrypted, photo_consent, exit_consent, is_active)
-         VALUES ($1,$2,$3,$4::date,$5,$6,$7,
-           CASE WHEN $8 <> '' THEN pgp_sym_encrypt($8,$9) ELSE NULL END,
-           COALESCE($10, false), COALESCE($11, false), true)
+         VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11,
+           CASE WHEN $12 <> '' THEN pgp_sym_encrypt($12,$13) ELSE NULL END,
+           COALESCE($14, false), COALESCE($15, false), true)
          RETURNING id`,
-        [familyId, s.firstName, s.lastName, s.birthDate, s.address || null, s.city || null, s.notes || null,
+        [familyId, s.firstName, s.lastName, s.birthDate, s.birthPlace || null, s.email || null, s.phone || null,
+         s.address || null, s.city || null, s.interests || null, s.notes || null,
          s.medicalText || '', CRYPTO_KEY, s.photoConsent, s.exitConsent],
       );
       const studentId = stuRows[0].id;

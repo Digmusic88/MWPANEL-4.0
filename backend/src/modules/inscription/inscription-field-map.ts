@@ -1,15 +1,15 @@
 import { guessGender, genderToRelationship } from '../import/gender';
 
-export interface InscriptionGuardian { fullName: string; relationship: 'madre'|'padre'|'tutor'|'otro'; nif: string; phone: string; email: string; isPrimary: boolean; }
+export interface InscriptionGuardian { fullName: string; relationship: 'madre'|'padre'|'tutor'|'otro'; nif: string; phone: string; email: string; profession: string; isPrimary: boolean; }
 
 /** ¿El texto tiene forma de DNI (8 dígitos + letra) o NIE (X/Y/Z + 7 dígitos + letra)? */
 const looksLikeDni = (s: string): boolean => /^[XYZ]?\d{7,8}[A-Za-z]$/.test((s || '').replace(/[\s-]/g, ''));
 const normalizeDni = (s: string): string => (s || '').replace(/[\s-]/g, '').toUpperCase();
 export interface InscriptionBank { iban: string; holder: string; nif: string; bankName: string; }
 export interface InscriptionPreview {
-  student: { firstName: string; lastName: string; birthDate: string | null; address: string; city: string; notes: string; photoConsent: boolean | null; exitConsent: boolean | null; medicalText: string; };
+  student: { firstName: string; lastName: string; birthDate: string | null; birthPlace: string; email: string; phone: string; address: string; city: string; interests: string; notes: string; photoConsent: boolean | null; exitConsent: boolean | null; medicalText: string; };
   guardians: InscriptionGuardian[];
-  family: { displayName: string; notes: string; };
+  family: { displayName: string; siblings: string; notes: string; };
   bank: InscriptionBank | null;
   warnings: string[];
 }
@@ -57,17 +57,20 @@ export function mapFieldsToInscription(f: Record<string,string>, group4: string|
   addMed('Tel. centro médico', 'NUMEROTELEFONORow1_2');
   const medicalText = medicalParts.join('\n');
 
-  // Notas blandas del alumno
-  const softStudent: string[] = [];
-  const addSoft = (label: string, key: string) => { const v = g(f, key); if (v) softStudent.push(`${label}: ${v}`); };
-  addSoft('Lugar de nacimiento', 'CIUDADLUGAR Y FECHA DE NACIMIENTO');
-  addSoft('Email alumno', 'EMAIL DEL ALUMNOADIRECCIÓN DE RESIDENCIA HABITUAL');
-  addSoft('Tel. alumno', 'TELÉFONODIRECCIÓN DE RESIDENCIA HABITUAL');
-  addSoft('Asignatura favorita', 'ASIGNATURA FAVORITARow1');
-  addSoft('Asignatura menos favorita', 'ASIGNATURA QUE LE GUSTA MENOSRow1');
-  addSoft('Deporte', 'DEPORTERow1');
-  addSoft('Música/Danza', 'MÚSICADANZARow1');
-  addSoft('Otros', 'OTROSRow1');
+  // Identidad/contacto del alumno → campos propios (antes iban a "notas")
+  const birthPlace = g(f, 'CIUDADLUGAR Y FECHA DE NACIMIENTO');
+  const studentEmail = g(f, 'EMAIL DEL ALUMNOADIRECCIÓN DE RESIDENCIA HABITUAL');
+  const studentPhone = g(f, 'TELÉFONODIRECCIÓN DE RESIDENCIA HABITUAL');
+
+  // Perfil blando de intereses → campo 'interests' (sección etiquetada, no notas genéricas)
+  const interestParts: string[] = [];
+  const addInterest = (label: string, key: string) => { const v = g(f, key); if (v) interestParts.push(`${label}: ${v}`); };
+  addInterest('Asignatura favorita', 'ASIGNATURA FAVORITARow1');
+  addInterest('Asignatura menos favorita', 'ASIGNATURA QUE LE GUSTA MENOSRow1');
+  addInterest('Deporte', 'DEPORTERow1');
+  addInterest('Música/Danza', 'MÚSICADANZARow1');
+  addInterest('Otros', 'OTROSRow1');
+  const interests = interestParts.join('\n');
 
   // Consentimientos: el radio Group4 de la plantilla viene pre-marcado 'Opción1'
   // INCLUSO en blanco → "sin responder" y "Opción1 elegido" son INDISTINGUIBLES
@@ -84,7 +87,7 @@ export function mapFieldsToInscription(f: Record<string,string>, group4: string|
   // como segundo apellido normal.
   const guardians: InscriptionGuardian[] = [];
   const pushGuardian = (
-    nameK: string, ape1K: string, ape2K: string, phoneK: string, emailK: string,
+    nameK: string, ape1K: string, ape2K: string, phoneK: string, emailK: string, professionK: string,
     isPrimary: boolean, relOverride?: 'madre'|'padre'|'tutor'|'otro',
   ) => {
     const seg = g(f, ape2K);
@@ -97,21 +100,19 @@ export function mapFieldsToInscription(f: Record<string,string>, group4: string|
       nif: isDni ? normalizeDni(seg) : '',
       phone: g(f, phoneK),
       email: g(f, emailK),
+      profession: professionK ? g(f, professionK) : '',
       isPrimary,
     });
   };
-  pushGuardian('NOMBRERow1_2', 'PRIMER APELLIDORow1_2', 'SEGUNDO APELLIDORow1_2', 'TELÉFONORow1', 'EMAILRow1', true);
-  pushGuardian('NOMBRERow1_3', 'PRIMER APELLIDORow1_3', 'SEGUNDO APELLIDORow1_3', 'TELÉFONORow1_2', 'EMAILRow1_2', false);
+  pushGuardian('NOMBRERow1_2', 'PRIMER APELLIDORow1_2', 'SEGUNDO APELLIDORow1_2', 'TELÉFONORow1', 'EMAILRow1', 'PROFESIÓNRow1', true);
+  pushGuardian('NOMBRERow1_3', 'PRIMER APELLIDORow1_3', 'SEGUNDO APELLIDORow1_3', 'TELÉFONORow1_2', 'EMAILRow1_2', 'PROFESIÓNRow1_2', false);
   const rel3 = g(f, 'RELACIÓN CON EL ALUMNORow1').toLowerCase();
   const rel3Enum: 'madre'|'padre'|'tutor'|'otro' = ['madre','padre','tutor'].includes(rel3) ? (rel3 as any) : 'otro';
-  pushGuardian('NOMBRERow1_4', 'PRIMER APELLIDORow1_4', 'SEGUNDO APELLIDORow1_4', 'TELÉFONORow1_3', 'EMAILRow1_3', false, rel3Enum);
+  pushGuardian('NOMBRERow1_4', 'PRIMER APELLIDORow1_4', 'SEGUNDO APELLIDORow1_4', 'TELÉFONORow1_3', 'EMAILRow1_3', '', false, rel3Enum);
   if (guardians.length === 0) warnings.push('No se detectó ningún tutor/contacto');
 
-  // Familia (profesión de tutores + hermanos en notas)
-  const famNotes: string[] = [];
-  const prof1 = g(f, 'PROFESIÓNRow1'); if (prof1) famNotes.push(`Profesión ${guardians[0]?.fullName || 'contacto 1'}: ${prof1}`);
-  const prof2 = g(f, 'PROFESIÓNRow1_2'); if (prof2) famNotes.push(`Profesión ${guardians[1]?.fullName || 'contacto 2'}: ${prof2}`);
-  const hermanos = g(f, 'HERMANOSAS en el caso de que los hubieraRow1'); if (hermanos) famNotes.push(`Hermanos/as: ${hermanos}`);
+  // Familia: hermanos → campo propio (antes en notas)
+  const siblings = g(f, 'HERMANOSAS en el caso de que los hubieraRow1');
 
   // Banco: componer IBAN de ES + Cuenta bancaria 2..6; solo si hay algo
   const ibanParts = ['ES', 'Cuenta bancaria 2', 'Cuenta bancaria 3', 'Cuenta bancaria 4', 'Cuenta bancaria 5', 'Cuenta bancaria 6'].map((k) => g(f, k)).filter(Boolean);
@@ -126,9 +127,9 @@ export function mapFieldsToInscription(f: Record<string,string>, group4: string|
   }
 
   return {
-    student: { firstName, lastName, birthDate, address, city: '', notes: softStudent.join('\n'), photoConsent, exitConsent, medicalText },
+    student: { firstName, lastName, birthDate, birthPlace, email: studentEmail, phone: studentPhone, address, city: '', interests, notes: '', photoConsent, exitConsent, medicalText },
     guardians,
-    family: { displayName: lastName || firstName || 'Familia', notes: famNotes.join('\n') },
+    family: { displayName: lastName || firstName || 'Familia', siblings, notes: '' },
     bank,
     warnings,
   };

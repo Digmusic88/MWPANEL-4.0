@@ -963,16 +963,19 @@ function FichaAlumno({ studentId, open, onClose }: { studentId?: string; open: b
         </div>
 
         {card('Datos personales', <div style={{ fontSize: 13, lineHeight: 1.9 }}>
-          <div><b>Fecha nac.:</b> {fmtDate(s.birthDate)}</div>
+          <div><b>Fecha nac.:</b> {fmtDate(s.birthDate)}{s.birthPlace ? <> · <b>Lugar:</b> {s.birthPlace}</> : null}</div>
           <div><b>Colegio:</b> {s.school || '—'} · <b>Curso:</b> {s.grade || '—'}</div>
           <div><b>Dirección:</b> {[s.address, s.postalCode, s.city].filter(Boolean).join(', ') || '—'}</div>
+          {(s.email || s.phone) && <div><b>Contacto alumno:</b> {[s.email, s.phone].filter(Boolean).join(' · ')}</div>}
           <div><b>Autorizaciones:</b> {s.photoConsent ? <Tag color="green">Imagen</Tag> : <Tag>Imagen ✗</Tag>}{s.exitConsent ? <Tag color="green">Salida</Tag> : <Tag>Salida ✗</Tag>}</div>
+          {s.siblings && <div><b>Hermanos/as:</b> {s.siblings}</div>}
+          {s.interests && <div style={{ whiteSpace: 'pre-line' }}><b>Intereses:</b>{'\n'}{s.interests}</div>}
           {s.notes && <div><b>Notas:</b> {s.notes}</div>}
         </div>)}
 
         {card('Familia y tutores', data.guardians.length ? (
           <Table rowKey="fullName" size="small" pagination={false} dataSource={data.guardians}
-            columns={[{ title: 'Tutor', dataIndex: 'fullName' }, { title: 'Teléfono', dataIndex: 'phone', render: (p: any, r: any) => [p, r.phoneAlt].filter(Boolean).join(' / ') || '—' }, { title: 'Correo', dataIndex: 'email', render: (e: any) => e || '—' }]} />
+            columns={[{ title: 'Tutor', dataIndex: 'fullName', render: (n: any, r: any) => <>{n}{r.nif ? <div style={{ fontSize: 11, color: '#888' }}>{r.nif}</div> : null}{r.profession ? <div style={{ fontSize: 11, color: '#888' }}>{r.profession}</div> : null}</> }, { title: 'Teléfono', dataIndex: 'phone', render: (p: any, r: any) => [p, r.phoneAlt].filter(Boolean).join(' / ') || '—' }, { title: 'Correo', dataIndex: 'email', render: (e: any) => e || '—' }]} />
         ) : <Text type="secondary">Sin tutores registrados</Text>)}
 
         {card('Matrículas', data.enrollments.length ? (

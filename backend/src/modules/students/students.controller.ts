@@ -159,10 +159,11 @@ export class StudentsController {
   async ficha(@Param('id') id: string) {
     const student = (await this.ds.query(`
       SELECT st.id, st.first_name AS "firstName", st.last_name AS "lastName", st.birth_date AS "birthDate",
+             st.birth_place AS "birthPlace", st.email, st.phone, st.interests,
              st.school_origin AS "school", st.grade_label AS "grade", st.address, st.postal_code AS "postalCode", st.city,
              st.photo_consent AS "photoConsent", st.exit_consent AS "exitConsent", st.notes,
              st.mwpanel_student_id AS "mwpanelStudentId", st.mock_user_id AS "mockUserId",
-             f.id AS "familyId", f.display_name AS "familyName",
+             f.id AS "familyId", f.display_name AS "familyName", f.siblings,
              COALESCE(NULLIF(TRIM(COALESCE(st.first_name,'')||' '||COALESCE(st.last_name,'')),''), va.first_name||' '||va.last_name) AS "fullName"
       FROM secretaria.students st
       LEFT JOIN secretaria.families f ON f.id=st.family_id
@@ -171,7 +172,7 @@ export class StudentsController {
     if (!student) return { error: 'Alumno no encontrado' };
 
     const guardians = await this.ds.query(`
-      SELECT full_name AS "fullName", phone, phone_alt AS "phoneAlt", email, relationship::text AS relationship, is_primary_contact AS "isPrimary"
+      SELECT full_name AS "fullName", phone, phone_alt AS "phoneAlt", email, nif, profession, relationship::text AS relationship, is_primary_contact AS "isPrimary"
       FROM secretaria.guardians WHERE family_id=$1 ORDER BY is_primary_contact DESC`, [student.familyId]);
 
     const enrollments = await this.ds.query(`
@@ -321,16 +322,19 @@ export class StudentsController {
       `SELECT s.id, s.first_name AS "firstName", s.last_name AS "lastName",
               s.birth_date AS "birthDate", s.grade_label AS "gradeLabel",
               s.school_origin AS "schoolOrigin",
+              s.birth_place AS "birthPlace", s.email, s.phone, s.interests,
               s.address, s.postal_code AS "postalCode", s.city, s.notes,
               s.mwpanel_student_id AS "mwpanelStudentId",
-              s.family_id AS "familyId",
+              s.family_id AS "familyId", f.siblings,
               s.updated_at AS "updatedAt"
-       FROM secretaria.students s WHERE s.id = $1`, [id]);
+       FROM secretaria.students s
+       LEFT JOIN secretaria.families f ON f.id = s.family_id
+       WHERE s.id = $1`, [id]);
     if (!student) return null;
 
     const guardians = await this.ds.query(
       `SELECT id, full_name AS "fullName", relationship, phone,
-              phone_alt AS "phoneAlt", email, nif,
+              phone_alt AS "phoneAlt", email, nif, profession,
               is_primary_contact AS "isPrimary"
        FROM secretaria.guardians WHERE family_id = $1
        ORDER BY is_primary_contact DESC`, [student.familyId]);
@@ -378,9 +382,13 @@ export class StudentsController {
         if (b.student.birthDate  !== undefined) push('birth_date',    b.student.birthDate  ?? null);
         if (b.student.gradeLabel !== undefined) push('grade_label',   b.student.gradeLabel ?? null);
         if (b.student.schoolOrigin !== undefined) push('school_origin', b.student.schoolOrigin ?? null);
+        if (b.student.birthPlace !== undefined) push('birth_place',   b.student.birthPlace ?? null);
+        if (b.student.email      !== undefined) push('email',         b.student.email      ?? null);
+        if (b.student.phone      !== undefined) push('phone',         b.student.phone      ?? null);
         if (b.student.address    !== undefined) push('address',       b.student.address    ?? null);
         if (b.student.postalCode !== undefined) push('postal_code',   b.student.postalCode ?? null);
         if (b.student.city       !== undefined) push('city',          b.student.city       ?? null);
+        if (b.student.interests  !== undefined) push('interests',     b.student.interests  ?? null);
         if (b.student.notes      !== undefined) push('notes',         b.student.notes      ?? null);
         if (sets.length > 0) {
           params.push(id);
@@ -405,6 +413,14 @@ export class StudentsController {
         }
       }
 
+      // Familia: hermanos/as (campo propio, no notas)
+      if (b.family?.siblings !== undefined) {
+        await m.query(
+          `UPDATE secretaria.families f SET siblings=$1
+           FROM secretaria.students s WHERE s.family_id=f.id AND s.id=$2`,
+          [b.family.siblings ?? null, id]);
+      }
+
       // Upsert tutor principal (is_primary_contact = true)
       if (b.guardian1?.fullName) {
         const existing = await m.query(
@@ -414,21 +430,21 @@ export class StudentsController {
         if (existing.length > 0) {
           await m.query(
             `UPDATE secretaria.guardians SET
-               full_name=$1, relationship=$2, phone=$3, phone_alt=$4, email=$5, nif=$6
-             WHERE id=$7`,
+               full_name=$1, relationship=$2, phone=$3, phone_alt=$4, email=$5, nif=$6, profession=$7
+             WHERE id=$8`,
             [b.guardian1.fullName, b.guardian1.relationship || 'tutor',
              b.guardian1.phone || null, b.guardian1.phoneAlt || null,
-             b.guardian1.email || null, b.guardian1.nif || null,
+             b.guardian1.email || null, b.guardian1.nif || null, b.guardian1.profession || null,
              existing[0].id]);
         } else {
           const [student] = await m.query(`SELECT family_id FROM secretaria.students WHERE id=$1`, [id]);
           await m.query(
             `INSERT INTO secretaria.guardians
-               (family_id, full_name, relationship, phone, phone_alt, email, nif, is_primary_contact)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,true)`,
+               (family_id, full_name, relationship, phone, phone_alt, email, nif, profession, is_primary_contact)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true)`,
             [student.family_id, b.guardian1.fullName, b.guardian1.relationship || 'tutor',
              b.guardian1.phone || null, b.guardian1.phoneAlt || null,
-             b.guardian1.email || null, b.guardian1.nif || null]);
+             b.guardian1.email || null, b.guardian1.nif || null, b.guardian1.profession || null]);
         }
       }
 
@@ -441,20 +457,20 @@ export class StudentsController {
         if (existing2.length > 0) {
           await m.query(
             `UPDATE secretaria.guardians SET
-               full_name=$1, relationship=$2, phone=$3, phone_alt=$4, email=$5, nif=$6
-             WHERE id=$7`,
+               full_name=$1, relationship=$2, phone=$3, phone_alt=$4, email=$5, nif=$6, profession=$7
+             WHERE id=$8`,
             [b.guardian2.fullName, b.guardian2.relationship || 'tutor',
              b.guardian2.phone || null, b.guardian2.phoneAlt || null,
-             b.guardian2.email || null, b.guardian2.nif || null,
+             b.guardian2.email || null, b.guardian2.nif || null, b.guardian2.profession || null,
              existing2[0].id]);
         } else {
           await m.query(
             `INSERT INTO secretaria.guardians
-               (family_id, full_name, relationship, phone, phone_alt, email, nif, is_primary_contact)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,false)`,
+               (family_id, full_name, relationship, phone, phone_alt, email, nif, profession, is_primary_contact)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false)`,
             [student.family_id, b.guardian2.fullName, b.guardian2.relationship || 'tutor',
              b.guardian2.phone || null, b.guardian2.phoneAlt || null,
-             b.guardian2.email || null, b.guardian2.nif || null]);
+             b.guardian2.email || null, b.guardian2.nif || null, b.guardian2.profession || null]);
         }
       }
 
@@ -519,24 +535,24 @@ export class StudentsController {
       } else {
         const displayName = [b.student?.firstName, b.student?.lastName]
           .filter(Boolean).join(' ') || 'Familia sin nombre';
-        const family = await m.save(m.create(Family, { displayName }));
+        const family = await m.save(m.create(Family, { displayName, siblings: b.family?.siblings || null }));
         familyId = family.id;
         // Tutores solo al crear una familia nueva (la existente ya tiene los suyos)
         if (b.guardian1?.fullName) {
           await m.query(
             `INSERT INTO secretaria.guardians
-               (family_id, full_name, relationship, phone, phone_alt, email, nif, is_primary_contact)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,true)`,
+               (family_id, full_name, relationship, phone, phone_alt, email, nif, profession, is_primary_contact)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true)`,
             [familyId, b.guardian1.fullName, b.guardian1.relationship || 'tutor',
-             b.guardian1.phone || null, b.guardian1.phoneAlt || null, b.guardian1.email || null, b.guardian1.nif || null]);
+             b.guardian1.phone || null, b.guardian1.phoneAlt || null, b.guardian1.email || null, b.guardian1.nif || null, b.guardian1.profession || null]);
         }
         if (b.guardian2?.fullName) {
           await m.query(
             `INSERT INTO secretaria.guardians
-               (family_id, full_name, relationship, phone, phone_alt, email, nif, is_primary_contact)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,false)`,
+               (family_id, full_name, relationship, phone, phone_alt, email, nif, profession, is_primary_contact)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false)`,
             [familyId, b.guardian2.fullName, b.guardian2.relationship || 'tutor',
-             b.guardian2.phone || null, b.guardian2.phoneAlt || null, b.guardian2.email || null, b.guardian2.nif || null]);
+             b.guardian2.phone || null, b.guardian2.phoneAlt || null, b.guardian2.email || null, b.guardian2.nif || null, b.guardian2.profession || null]);
         }
       }
 
@@ -546,11 +562,15 @@ export class StudentsController {
         firstName: b.student?.firstName || null,
         lastName:  b.student?.lastName  || null,
         birthDate: b.student?.birthDate || null,
+        birthPlace: b.student?.birthPlace || null,
+        email: b.student?.email || null,
+        phone: b.student?.phone || null,
         gradeLabel: b.student?.gradeLabel || null,
         schoolOrigin: b.student?.schoolOrigin || null,
         address: b.student?.address || null,
         postalCode: b.student?.postalCode || null,
         city: b.student?.city || null,
+        interests: b.student?.interests || null,
         notes: b.student?.notes || null,
       }));
 

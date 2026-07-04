@@ -12,7 +12,8 @@ export class FichaService {
 
     const s = (await this.ds.query(
       `SELECT id, family_id AS "familyId", first_name AS "firstName", last_name AS "lastName",
-              to_char(birth_date,'YYYY-MM-DD') AS "birthDate", school_origin AS "schoolOrigin",
+              to_char(birth_date,'YYYY-MM-DD') AS "birthDate", birth_place AS "birthPlace",
+              email, phone, interests, school_origin AS "schoolOrigin",
               grade_label AS "gradeLabel", address, postal_code AS "postalCode", city,
               photo_consent AS "photoConsent", exit_consent AS "exitConsent", notes,
               is_active AS "isActive", import_pending AS "importPending",
@@ -25,14 +26,14 @@ export class FichaService {
 
     const family = s.familyId
       ? (await this.ds.query(
-          `SELECT display_name AS "displayName", notes FROM secretaria.families WHERE id = $1`,
+          `SELECT display_name AS "displayName", siblings, notes FROM secretaria.families WHERE id = $1`,
           [s.familyId]))[0]
       : null;
 
     const guardians = s.familyId
       ? await this.ds.query(
           `SELECT full_name AS "fullName", relationship::text AS relationship, nif,
-                  phone, phone_alt AS "phoneAlt", email, is_primary_contact AS "isPrimaryContact"
+                  phone, phone_alt AS "phoneAlt", email, profession, is_primary_contact AS "isPrimaryContact"
            FROM secretaria.guardians WHERE family_id = $1
            ORDER BY is_primary_contact DESC, created_at ASC`,
           [s.familyId])
@@ -60,13 +61,14 @@ export class FichaService {
     return {
       student: {
         firstName: s.firstName, lastName: s.lastName, birthDate: s.birthDate,
+        birthPlace: s.birthPlace, email: s.email, phone: s.phone, interests: s.interests,
         schoolOrigin: s.schoolOrigin, gradeLabel: s.gradeLabel,
         address: s.address, postalCode: s.postalCode, city: s.city,
         photoConsent: s.photoConsent, exitConsent: s.exitConsent, notes: s.notes,
         isActive: s.isActive, importPending: s.importPending, importPendingFields: s.importPendingFields,
       },
       medical: s.medical ?? null,
-      family: family ? { displayName: family.displayName, notes: family.notes } : { displayName: null, notes: null },
+      family: family ? { displayName: family.displayName, siblings: family.siblings, notes: family.notes } : { displayName: null, siblings: null, notes: null },
       guardians,
       enrollments: splitEnrollments(enrollmentRows),
     };

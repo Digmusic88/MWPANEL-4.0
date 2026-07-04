@@ -8,11 +8,15 @@ export class Student {
   @Column({ name: 'first_name', nullable: true }) firstName: string;
   @Column({ name: 'last_name', nullable: true }) lastName: string;
   @Column({ name: 'birth_date', type: 'date', nullable: true }) birthDate: string;
+  @Column({ name: 'birth_place', nullable: true }) birthPlace: string;
+  @Column({ nullable: true }) email: string;
+  @Column({ nullable: true }) phone: string;
   @Column({ name: 'grade_label', nullable: true }) gradeLabel: string;
   @Column({ name: 'school_origin', nullable: true }) schoolOrigin: string;
   @Column({ nullable: true }) address: string;
   @Column({ name: 'postal_code', nullable: true }) postalCode: string;
   @Column({ nullable: true }) city: string;
+  @Column({ type: 'text', nullable: true }) interests: string;
   @Column({ nullable: true }) notes: string;
   @Column({ name: 'is_active', default: true }) isActive: boolean;
 }

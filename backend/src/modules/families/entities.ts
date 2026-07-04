@@ -5,6 +5,7 @@ export class Family {
   @PrimaryGeneratedColumn('uuid') id: string;
   @Column({ name: 'display_name' }) displayName: string;
   @Column({ name: 'mwpanel_family_id', nullable: true }) mwpanelFamilyId: string;
+  @Column({ type: 'text', nullable: true }) siblings: string;
   @Column({ nullable: true }) notes: string;
   @Column({ name: 'created_at', type: 'timestamptz', default: () => 'now()' }) createdAt: Date;
 }

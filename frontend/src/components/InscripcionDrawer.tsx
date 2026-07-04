@@ -107,11 +107,16 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
           firstName: d.firstName,
           lastName: d.lastName,
           birthDate: d.birthDate ? String(d.birthDate).slice(0, 10) : undefined,
+          birthPlace: d.birthPlace,
+          studentEmail: d.email,
+          studentPhone: d.phone,
           gradeLabel: d.gradeLabel,
           schoolOrigin: d.schoolOrigin,
           address: d.address,
           postalCode: d.postalCode,
           city: d.city,
+          interests: d.interests,
+          siblings: d.siblings,
           notes: d.notes,
           g1FullName: g1?.fullName,
           g1Relationship: g1?.relationship,
@@ -119,12 +124,14 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
           g1PhoneAlt: g1?.phoneAlt,
           g1Email: g1?.email,
           g1Nif: g1?.nif,
+          g1Profession: g1?.profession,
           g2FullName: g2?.fullName,
           g2Relationship: g2?.relationship,
           g2Phone: g2?.phone,
           g2PhoneAlt: g2?.phoneAlt,
           g2Email: g2?.email,
           g2Nif: g2?.nif,
+          g2Profession: g2?.profession,
         });
       });
     } else {
@@ -232,22 +239,27 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
             firstName: values.firstName,
             lastName: values.lastName,
             birthDate: values.birthDate || null,
+            birthPlace: values.birthPlace || null,
+            email: values.studentEmail || null,
+            phone: values.studentPhone || null,
             gradeLabel: values.gradeLabel || null,
             schoolOrigin: values.schoolOrigin || null,
             address: values.address || null,
             postalCode: values.postalCode || null,
             city: values.city || null,
+            interests: values.interests || null,
             notes: values.notes || null,
           },
+          family: { siblings: values.siblings || null },
           guardian1: values.g1FullName ? {
             fullName: values.g1FullName, relationship: values.g1Relationship,
             phone: values.g1Phone, phoneAlt: values.g1PhoneAlt,
-            email: values.g1Email, nif: values.g1Nif,
+            email: values.g1Email, nif: values.g1Nif, profession: values.g1Profession,
           } : undefined,
           guardian2: showG2 && values.g2FullName ? {
             fullName: values.g2FullName, relationship: values.g2Relationship,
             phone: values.g2Phone, phoneAlt: values.g2PhoneAlt,
-            email: values.g2Email, nif: values.g2Nif,
+            email: values.g2Email, nif: values.g2Nif, profession: values.g2Profession,
           } : undefined,
         });
         await saveIban(familyId, values);
@@ -266,22 +278,27 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
             firstName: values.firstName,
             lastName: values.lastName || null,
             birthDate: values.birthDate || null,
+            birthPlace: values.birthPlace || null,
+            email: values.studentEmail || null,
+            phone: values.studentPhone || null,
             gradeLabel: values.gradeLabel || null,
             schoolOrigin: values.schoolOrigin || null,
             address: values.address || null,
             postalCode: values.postalCode || null,
             city: values.city || null,
+            interests: values.interests || null,
             notes: values.notes || null,
           },
+          family: { siblings: values.siblings || null },
           guardian1: values.g1FullName ? {
             fullName: values.g1FullName, relationship: values.g1Relationship || 'tutor',
             phone: values.g1Phone || null, phoneAlt: values.g1PhoneAlt || null,
-            email: values.g1Email || null, nif: values.g1Nif || null,
+            email: values.g1Email || null, nif: values.g1Nif || null, profession: values.g1Profession || null,
           } : undefined,
           guardian2: showG2 && values.g2FullName ? {
             fullName: values.g2FullName, relationship: values.g2Relationship || 'tutor',
             phone: values.g2Phone || null, phoneAlt: values.g2PhoneAlt || null,
-            email: values.g2Email || null, nif: values.g2Nif || null,
+            email: values.g2Email || null, nif: values.g2Nif || null, profession: values.g2Profession || null,
           } : undefined,
           enrollments,
           matriculaPaid: matriculaPaid ? {
@@ -392,6 +409,26 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
             </Form.Item>
           </Col>
         </Row>
+        <Row gutter={12}>
+          <Col span={8}>
+            <Form.Item name="birthPlace" label="Lugar de nacimiento">
+              <Input placeholder="Pamplona" />
+            </Form.Item>
+          </Col>
+          <Col span={8}>
+            <Form.Item name="studentEmail" label="Email del alumno">
+              <Input type="email" placeholder="Opcional" />
+            </Form.Item>
+          </Col>
+          <Col span={8}>
+            <Form.Item name="studentPhone" label="Teléfono del alumno">
+              <Input placeholder="Opcional" />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Form.Item name="interests" label="Intereses / aficiones" tooltip="Asignatura favorita, deporte, música/danza, otros…">
+          <Input.TextArea rows={2} placeholder="Asignatura favorita, deporte, música/danza…" />
+        </Form.Item>
         <Form.Item name="notes" label="Notas internas">
           <Input.TextArea rows={2} />
         </Form.Item>
@@ -450,9 +487,18 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
             </Form.Item>
           </Col>
         </Row>
-        <Form.Item name="g1Nif" label="NIF / DNI (opcional)">
-          <Input style={{ width: 180 }} />
-        </Form.Item>
+        <Row gutter={12}>
+          <Col span={8}>
+            <Form.Item name="g1Nif" label="NIF / DNI (opcional)">
+              <Input />
+            </Form.Item>
+          </Col>
+          <Col span={16}>
+            <Form.Item name="g1Profession" label="Profesión (opcional)">
+              <Input />
+            </Form.Item>
+          </Col>
+        </Row>
 
         {!showG2 ? (
           <Button type="dashed" icon={<PlusOutlined />} onClick={() => setShowG2(true)} style={{ marginBottom: 12 }}>
@@ -487,11 +533,24 @@ export function InscripcionDrawer({ open, editingStudentId, onClose, onSaved }: 
                 <Form.Item name="g2Email" label="Email"><Input type="email" /></Form.Item>
               </Col>
             </Row>
-            <Form.Item name="g2Nif" label="NIF / DNI (opcional)">
-              <Input style={{ width: 180 }} />
-            </Form.Item>
+            <Row gutter={12}>
+              <Col span={8}>
+                <Form.Item name="g2Nif" label="NIF / DNI (opcional)">
+                  <Input />
+                </Form.Item>
+              </Col>
+              <Col span={16}>
+                <Form.Item name="g2Profession" label="Profesión (opcional)">
+                  <Input />
+                </Form.Item>
+              </Col>
+            </Row>
           </>
         )}
+
+        <Form.Item name="siblings" label="Hermanos/as (opcional)" tooltip="Hermanos/as en el centro o fuera">
+          <Input.TextArea rows={2} placeholder="Nombres y edades de hermanos/as…" />
+        </Form.Item>
 
         {/* DOMICILIACIÓN (SEPA) — opcional */}
         <Divider orientation="left">Domiciliación (SEPA) — opcional</Divider>

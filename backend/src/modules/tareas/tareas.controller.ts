@@ -145,7 +145,8 @@ export class TareasController {
 
   // Estadísticas por alumno en un rango (conteo de cada carita)
   @Get('summary')
-  async summary(@Query('groupId') groupId: string, @Query('from') from: string, @Query('to') to: string) {
+  async summary(@Req() req: any, @Query('groupId') groupId: string, @Query('from') from: string, @Query('to') to: string) {
+    await assertTeacherOwnsGroup(this.ds, req.user, groupId);
     return this.ds.query(`
       SELECT COALESCE(NULLIF(TRIM(COALESCE(st.first_name,'')||' '||COALESCE(st.last_name,'')),''), va.first_name||' '||va.last_name) AS "studentName",
              count(tr.id) FILTER (WHERE tr.level='verde') AS "verde",

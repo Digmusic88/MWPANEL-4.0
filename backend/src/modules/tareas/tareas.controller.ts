@@ -4,7 +4,7 @@ import { Type } from 'class-transformer';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { SecretariaAuthGuard, Roles } from '../../common/secretaria-auth.guard';
-import { assertTeacherOwnsGroup, isOnlyTeacher, teacherIdOf } from '../../common/teacher-scope';
+import { assertTeacherOwnsGroup, assertTeacherOwnsEnrollments, isOnlyTeacher, teacherIdOf } from '../../common/teacher-scope';
 
 const LEVELS = ['verde', 'naranja', 'roja'];
 
@@ -30,7 +30,8 @@ export class TareasController {
 
   // Hoja de tareas de un grupo en una fecha (alumnos matriculados + su carita; verde por defecto)
   @Get()
-  async sheet(@Query('groupId') groupId: string, @Query('date') date: string, @Query('academicYearId') yearId?: string) {
+  async sheet(@Req() req: any, @Query('groupId') groupId: string, @Query('date') date: string, @Query('academicYearId') yearId?: string) {
+    await assertTeacherOwnsGroup(this.ds, req.user, groupId);
     const yid = yearId || (await this.activeYearId());
     return this.ds.query(`
       SELECT e.id AS "enrollmentId",
@@ -46,7 +47,8 @@ export class TareasController {
 
   // Rejilla histórica: alumnos × días registrados (recientes a la derecha) + el día seleccionado.
   @Get('grid')
-  async grid(@Query('groupId') groupId: string, @Query('date') date: string, @Query('academicYearId') yearId?: string) {
+  async grid(@Req() req: any, @Query('groupId') groupId: string, @Query('date') date: string, @Query('academicYearId') yearId?: string) {
+    await assertTeacherOwnsGroup(this.ds, req.user, groupId);
     const yid = yearId || (await this.activeYearId());
     const students = await this.ds.query(`
       SELECT e.id AS "enrollmentId",
@@ -75,7 +77,8 @@ export class TareasController {
 
   // Guardar la hoja (upsert por matrícula+fecha)
   @Post('save') @Roles('secretaria_admin','secretaria_staff','secretaria_teacher')
-  async save(@Body() b: SaveDto) {
+  async save(@Req() req: any, @Body() b: SaveDto) {
+    await assertTeacherOwnsEnrollments(this.ds, req.user, b.records.map(r => r.enrollmentId));
     for (const r of b.records) {
       await this.ds.query(`
         INSERT INTO secretaria.task_records(enrollment_id, date, level, notes, updated_at)

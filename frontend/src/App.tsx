@@ -946,7 +946,7 @@ function FichaAlumno({ studentId, open, onClose }: { studentId?: string; open: b
   const taskPct = tk?.total ? Math.round((tk.verde / tk.total) * 100) : null;
   const card = (title: any, children: any) => <Card size="small" title={title} style={{ marginBottom: 12 }}>{children}</Card>;
   return (
-    <Drawer title="Ficha del alumno" placement="right" width={screens.md ? 560 : '100%'} open={open} onClose={onClose}>
+    <Drawer title="Ficha del alumno" placement="right" width={screens.lg ? 860 : screens.md ? 680 : '100%'} open={open} onClose={onClose}>
       {loading || !data ? <Card loading /> : (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
           <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#579172', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontFamily: "'Lora',serif" }}>

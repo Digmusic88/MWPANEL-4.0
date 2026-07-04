@@ -87,6 +87,25 @@ El `status` es el enum inglés de MW Panel (`present`, `absent`, `late`,
 (igual que el boletín): retrasos y salidas anticipadas cuentan como asistencia;
 solo restan faltas justificadas e injustificadas.
 
+### Lectura directa del expediente académico del colegio (SP-3, 2026-07-04)
+La ficha del alumno de Secretaría (`students.controller.ts` `GET /students/:id/ficha`)
+lee el expediente académico del COLEGIO (MW Panel) del curso activo para mostrar la
+tabla de calificaciones (asignatura × trimestres/final + conversión LOMLOE + nota
+media). Solo para alumnos enlazados (`mwpanel_student_id`), curso activo
+(`academic_years.isCurrent = true`). Solo lectura. Primer consumidor de
+`academic_records` fuera de MW Panel.
+
+| Tabla `public.*` | Columnas | Uso |
+|---|---|---|
+| `academic_records` | id, studentId, academicYear, finalGPA, isActive | expediente del curso + nota media |
+| `academic_record_entries` | academicRecordId, subjectAssignmentId, numericValue, period, isPassing, isActive, type | filas de asignatura por periodo |
+| `subject_assignments` | id, subjectId | resolver la asignatura de la entrada |
+| `subjects` | id, name | nombre de la asignatura |
+
+La conversión LOMLOE de la nota (0-100 → Insuficiente/Suficiente/Bien/Notable/
+Sobresaliente, con variantes Infantil/Bachiller) se calcula en el backend de
+Secretaría (espejo de `report-generator` de MW Panel).
+
 ## Acoplamientos de seguridad
 
 - **`JWT_SECRET` compartido** entre MW Panel y Secretaría (Secretaría valida los

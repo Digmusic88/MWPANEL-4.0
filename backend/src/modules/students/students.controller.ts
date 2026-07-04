@@ -253,7 +253,64 @@ export class StudentsController {
       };
     }
 
-    return { student, guardians, enrollments, levelTests, documents, attendance, tasks, colegioAttendance };
+    // Expediente académico del COLEGIO (MW Panel) — lectura cross-schema de
+    // public.academic_records + public.academic_record_entries del curso activo.
+    // Solo alumnos enlazados. Contrato: ver CONTRATO_MWPANEL.md (academic_records).
+    let expediente: any = { linked: false, academicYear: null, etapa: null, finalGPA: null, finalGPALomloe: null, subjects: [] };
+    if (student.mwpanelStudentId) {
+      const curYear = (await this.ds.query(
+        `SELECT name FROM public.academic_years WHERE "isCurrent"=true LIMIT 1`))[0];
+      const yearName = curYear?.name || null;
+      const rec = yearName ? (await this.ds.query(`
+        SELECT ar.id, ar."finalGPA", el.name AS etapa
+        FROM public.academic_records ar
+        JOIN public.students st ON st.id=ar."studentId"
+        LEFT JOIN public.educational_levels el ON el.id=st."educationalLevelId"
+        WHERE ar."studentId"=$1 AND ar."academicYear"=$2 AND ar."isActive"=true
+        LIMIT 1`, [student.mwpanelStudentId, yearName]))[0] : null;
+      if (rec) {
+        const rows = await this.ds.query(`
+          SELECT subj.name AS subject, are.period::text AS period,
+                 are."numericValue" AS value, are."isPassing" AS "isPassing"
+          FROM public.academic_record_entries are
+          LEFT JOIN public.subject_assignments sa ON sa.id=are."subjectAssignmentId"
+          LEFT JOIN public.subjects subj ON subj.id=sa."subjectId"
+          WHERE are."academicRecordId"=$1 AND are."isActive"=true AND are.type='academic'`, [rec.id]);
+        const etapa = rec.etapa || '';
+        const bySubject = new Map<string, any>();
+        for (const r of rows) {
+          const key = r.subject || 'Asignatura';
+          const row = bySubject.get(key) || { subject: key, first: null, second: null, third: null, annual: null, isPassing: false };
+          const val = r.value === null || r.value === undefined ? null : Number(r.value);
+          if (r.period === 'first_trimester') row.first = val;
+          else if (r.period === 'second_trimester') row.second = val;
+          else if (r.period === 'third_trimester') row.third = val;
+          else if (r.period === 'annual') { row.annual = val; row.isPassing = r.isPassing; }
+          bySubject.set(key, row);
+        }
+        const subjects = Array.from(bySubject.values()).map((s) => ({
+          ...s, annualLomloe: this.lomloe(s.annual, etapa),
+        }));
+        const gpa = rec.finalGPA === null || rec.finalGPA === undefined ? null : Number(rec.finalGPA);
+        expediente = {
+          linked: true, academicYear: yearName, etapa,
+          finalGPA: gpa, finalGPALomloe: this.lomloe(gpa, etapa), subjects,
+        };
+      } else {
+        expediente.linked = true; expediente.academicYear = yearName;
+      }
+    }
+
+    return { student, guardians, enrollments, levelTests, documents, attendance, tasks, colegioAttendance, expediente };
+  }
+
+  /** Conversión LOMLOE 0-100 → cualitativa (espejo de report-generator de MW Panel). */
+  private lomloe(value: number | null, etapa: string): string | null {
+    if (value === null || value === undefined || isNaN(value)) return null;
+    const e = (etapa || '').toLowerCase();
+    if (e.includes('infantil')) return value < 50 ? 'No conseguido' : value < 70 ? 'En proceso' : 'Conseguido';
+    if (e.includes('bachiller')) return (value / 10).toFixed(1).replace('.', ',');
+    return value < 50 ? 'Insuficiente' : value < 60 ? 'Suficiente' : value < 70 ? 'Bien' : value < 90 ? 'Notable' : 'Sobresaliente';
   }
 
   @Get(':id/full') @Roles('secretaria_admin','secretaria_staff','direccion')

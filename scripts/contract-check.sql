@@ -39,7 +39,22 @@ BEGIN
             ('public','attendance_records','academicYearId'),
             ('public','academic_years','id'),
             ('public','academic_years','name'),
-            ('public','academic_years','isCurrent')
+            ('public','academic_years','isCurrent'),
+            ('public','academic_records','id'),
+            ('public','academic_records','studentId'),
+            ('public','academic_records','academicYear'),
+            ('public','academic_records','finalGPA'),
+            ('public','academic_records','isActive'),
+            ('public','academic_record_entries','academicRecordId'),
+            ('public','academic_record_entries','subjectAssignmentId'),
+            ('public','academic_record_entries','numericValue'),
+            ('public','academic_record_entries','period'),
+            ('public','academic_record_entries','isPassing'),
+            ('public','academic_record_entries','type'),
+            ('public','subject_assignments','id'),
+            ('public','subject_assignments','subjectId'),
+            ('public','subjects','id'),
+            ('public','subjects','name')
         ) AS t(sch, tbl, col)
     LOOP
         IF NOT EXISTS (

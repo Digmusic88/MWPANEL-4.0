@@ -931,6 +931,9 @@ function FichaAlumno({ studentId, open, onClose }: { studentId?: string; open: b
   const s = data?.student;
   const at = data?.attendance, tk = data?.tasks;
   const ca = data?.colegioAttendance;
+  const ex = data?.expediente;
+  const gradeColor = (v: number | null | undefined) => (v == null ? undefined : v < 50 ? 'red' : v < 70 ? 'gold' : 'green');
+  const g = (v: number | null | undefined) => (v == null ? '—' : Number.isInteger(v) ? String(v) : String(Number(Number(v).toFixed(2))));
   const MW_ATT: Record<string, { label: string; color: string }> = {
     present: { label: 'Presente', color: 'green' },
     late: { label: 'Retraso', color: 'gold' },
@@ -1010,6 +1013,47 @@ function FichaAlumno({ studentId, open, onClose }: { studentId?: string; open: b
               ) : <Text type="secondary">sin registros</Text>}
             </div>
           </div>
+        ))}
+
+        {card(<span>Expediente académico{ex?.academicYear ? <Tag style={{ marginLeft: 6 }}>{ex.academicYear}</Tag> : null}</span>, (
+          ex?.linked && ex?.subjects?.length ? (
+            <div style={{ fontSize: 13 }}>
+              <div style={{ marginBottom: 8 }}>
+                <b>Nota media (colegio):</b>{' '}
+                {ex.finalGPA != null
+                  ? <Tag color={gradeColor(ex.finalGPA)}>{g(ex.finalGPA)}/100{ex.finalGPALomloe ? ` · ${ex.finalGPALomloe}` : ''}</Tag>
+                  : <Text type="secondary">—</Text>}
+              </div>
+              <Table rowKey="subject" size="small" pagination={false} dataSource={ex.subjects}
+                columns={[
+                  { title: 'Asignatura', dataIndex: 'subject' },
+                  { title: '1ºT', dataIndex: 'first', align: 'center' as const, render: (v: any) => g(v) },
+                  { title: '2ºT', dataIndex: 'second', align: 'center' as const, render: (v: any) => g(v) },
+                  { title: '3ºT', dataIndex: 'third', align: 'center' as const, render: (v: any) => g(v) },
+                  { title: 'Final', dataIndex: 'annual', align: 'center' as const, render: (v: any) => v != null ? <b>{g(v)}</b> : '—' },
+                  { title: 'LOMLOE', dataIndex: 'annualLomloe', align: 'center' as const, render: (l: any, r: any) => l ? <Tag color={gradeColor(r.annual)}>{l}</Tag> : '—' },
+                ]} />
+            </div>
+          ) : ex?.linked ? (
+            <Text type="secondary">Sin expediente de calificaciones del colegio este curso.</Text>
+          ) : (
+            // Dossier adaptable para alumnos SOLO de academia (sin expediente de colegio)
+            <div style={{ fontSize: 13, lineHeight: 2 }}>
+              <Tag>Alumno de academia</Tag>
+              <div><b>Última prueba de nivel:</b>{' '}
+                {(data.levelTests || [])[0]?.resultLevel
+                  ? <>{(data.levelTests[0].resultLevel)}{data.levelTests[0].testDate ? ` (${fmtDate(data.levelTests[0].testDate)})` : ''}</>
+                  : <Text type="secondary">—</Text>}
+              </div>
+              <div><b>Asistencia (academia):</b>{' '}
+                {attPct != null ? <Tag color={attPct >= 90 ? 'green' : attPct >= 75 ? 'gold' : 'red'}>{attPct}%</Tag> : <Text type="secondary">sin registros</Text>}
+              </div>
+              <div><b>Tareas:</b>{' '}
+                {tk?.total ? `${tk.verde || 0} verde · ${tk.naranja || 0} naranja · ${tk.roja || 0} roja` : <Text type="secondary">sin registros</Text>}
+              </div>
+              {s.mockUserId ? <div><b>Cambridge Mock:</b> ver sección «Resultados de exámenes Mock»</div> : null}
+            </div>
+          )
         ))}
 
         {card(<span>Asistencia del colegio (MW Panel){ca?.academicYear ? <Tag style={{ marginLeft: 6 }}>{ca.academicYear}</Tag> : null}</span>, (

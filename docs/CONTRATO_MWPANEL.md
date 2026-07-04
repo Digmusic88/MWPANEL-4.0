@@ -15,6 +15,13 @@
   Secretaría sí hace UNA llamada REST saliente hacia MW Panel
   (`POST /api/enrollment`, aprovisionamiento de cuentas); ver detalle al final
   de este documento.
+- Desde Feature 2 (2026-07-04), MW Panel hace una llamada REST **saliente hacia
+  Secretaría** (`GET /api/secretaria/ficha/by-mwpanel/:mwStudentId`), de solo
+  lectura, para mostrar la ficha del alumno en su gestión (admin). El
+  acoplamiento **REST** pasa a ser bidireccional (1c: Secretaría→MW Panel
+  escritura; 2: MW Panel→Secretaría lectura), pero el acoplamiento **por schema**
+  sigue siendo unidireccional: Secretaría lee `public.*`; MW Panel **NO** lee
+  `secretaria.*` (recibe la ficha ya montada por JSON).
 
 ## Superficie del contrato (lo que Secretaría lee de `public.*`)
 
@@ -109,3 +116,16 @@ Panel (crea alumno+familia+cuentas, dedup por email). Acoplamientos:
 - Depende de que el `JWT_SECRET` siga siendo el mismo en ambos servicios.
 - Tras crear, Secretaría guarda el `student.id` devuelto en
   `secretaria.students.mwpanel_student_id`.
+
+## Llamada entrante MW Panel → Secretaría (Feature 2, ficha del alumno)
+
+- **Endpoint:** `GET /api/secretaria/ficha/by-mwpanel/:mwStudentId` (módulo `ficha/`).
+- **Auth:** `SecretariaAuthGuard` + `@Roles('secretaria_admin','direccion')`. MW
+  Panel firma un JWT de servicio con el `JWT_SECRET` compartido y `sub =
+  SECRETARIA_SERVICE_USER_ID` (un usuario con staff_role `secretaria_admin`).
+- **Qué expone:** ficha completa del alumno localizado por `mwpanel_student_id`
+  (datos, dirección, tutores, consentimientos, matrícula activa/historial) y las
+  **notas médicas descifradas** con `SECRETARIA_CRYPTO_KEY` (la clave nunca sale
+  de Secretaría). Solo lectura; 404 si no hay ficha.
+- **Consumidor:** backend de MW Panel `GET /api/students/:id/secretaria-ficha`
+  (admin) → panel solo-lectura en el detalle del alumno.

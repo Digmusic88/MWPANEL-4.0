@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards, NotFoundException, ParseUUIDPipe } from '@nestjs/common';
 import { SecretariaAuthGuard, Roles } from '../../common/secretaria-auth.guard';
 import { FichaService } from './ficha.service';
 
@@ -9,7 +9,7 @@ export class FichaController {
 
   @Get('by-mwpanel/:mwStudentId')
   @Roles('secretaria_admin', 'direccion')
-  async byMwpanel(@Param('mwStudentId') mwStudentId: string) {
+  async byMwpanel(@Param('mwStudentId', new ParseUUIDPipe()) mwStudentId: string) {
     const ficha = await this.svc.buildFicha(mwStudentId);
     if (!ficha) throw new NotFoundException('Sin ficha en Secretaría');
     return ficha;

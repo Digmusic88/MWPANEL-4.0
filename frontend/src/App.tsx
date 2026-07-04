@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo, createContext, useContext } from 'react';
 import {
   Layout, Menu, Button, Form, Input, Card, Typography, message, Alert, Table, Modal,
-  Select, InputNumber, Tag, Space, Tooltip, Statistic, Row, Col, Popconfirm, Switch, Checkbox, Dropdown, Empty, Progress, Drawer, Calendar, Badge, Grid, Tabs, Radio, Divider,
+  Select, InputNumber, Tag, Space, Tooltip, Statistic, Row, Col, Popconfirm, Switch, Checkbox, Dropdown, Empty, Progress, Drawer, Calendar, Badge, Grid, Tabs, Radio, Divider, Collapse,
 } from 'antd';
 import {
   DashboardOutlined, TeamOutlined, UserAddOutlined, EuroOutlined, LogoutOutlined,
@@ -930,6 +930,15 @@ function FichaAlumno({ studentId, open, onClose }: { studentId?: string; open: b
   };
   const s = data?.student;
   const at = data?.attendance, tk = data?.tasks;
+  const ca = data?.colegioAttendance;
+  const MW_ATT: Record<string, { label: string; color: string }> = {
+    present: { label: 'Presente', color: 'green' },
+    late: { label: 'Retraso', color: 'gold' },
+    justified_late: { label: 'Retraso justif.', color: 'gold' },
+    early_departure: { label: 'Salida anticipada', color: 'blue' },
+    justified_absence: { label: 'Falta justificada', color: 'orange' },
+    absent: { label: 'Falta injustificada', color: 'red' },
+  };
   const attPct = at?.total ? Math.round(((at.presente + at.retraso) / at.total) * 100) : null;
   const taskPct = tk?.total ? Math.round((tk.verde / tk.total) * 100) : null;
   const card = (title: any, children: any) => <Card size="small" title={title} style={{ marginBottom: 12 }}>{children}</Card>;
@@ -1001,6 +1010,35 @@ function FichaAlumno({ studentId, open, onClose }: { studentId?: string; open: b
               ) : <Text type="secondary">sin registros</Text>}
             </div>
           </div>
+        ))}
+
+        {card(<span>Asistencia del colegio (MW Panel){ca?.academicYear ? <Tag style={{ marginLeft: 6 }}>{ca.academicYear}</Tag> : null}</span>, (
+          !ca?.linked ? <Text type="secondary">Alumno no enlazado con el colegio (MW Panel).</Text>
+            : !ca?.summary ? <Text type="secondary">Sin registros de asistencia en el colegio este curso.</Text>
+              : (
+                <div style={{ fontSize: 13, lineHeight: 2 }}>
+                  <Space size={12} wrap style={{ marginBottom: 8 }}>
+                    <span><b>Presente:</b> {ca.summary.present}</span>
+                    <span><b>Retrasos:</b> {ca.summary.late}</span>
+                    <span><b>Salidas anticipadas:</b> {ca.summary.earlyDeparture}</span>
+                    <span><b>Faltas justif.:</b> {ca.summary.justifiedAbsence}</span>
+                    <span><b>Faltas injustif.:</b> {ca.summary.absent}</span>
+                    <Tag color={ca.summary.percentage >= 90 ? 'green' : ca.summary.percentage >= 75 ? 'gold' : 'red'}>{ca.summary.percentage}% asistencia</Tag>
+                  </Space>
+                  <Collapse ghost size="small" items={[{
+                    key: 'hist',
+                    label: `Ver historial diario (${ca.history.length} días)`,
+                    children: (
+                      <Table rowKey={(r: any) => `${r.date}-${r.status}`} size="small"
+                        pagination={{ pageSize: 15, size: 'small', hideOnSinglePage: true }} dataSource={ca.history}
+                        columns={[
+                          { title: 'Fecha', dataIndex: 'date', render: (d: any) => fmtDate(d) },
+                          { title: 'Estado', dataIndex: 'status', render: (st: any) => <Tag color={MW_ATT[st]?.color}>{MW_ATT[st]?.label || st}</Tag> },
+                        ]} />
+                    ),
+                  }]} />
+                </div>
+              )
         ))}
 
         {card('Pruebas de nivel', data.levelTests.length ? data.levelTests.map((lt: any, i: number) => (

@@ -217,7 +217,43 @@ export class StudentsController {
       FROM secretaria.task_records t JOIN secretaria.enrollments e ON e.id=t.enrollment_id
       WHERE e.student_id=$1`, [id]))[0];
 
-    return { student, guardians, enrollments, levelTests, documents, attendance, tasks };
+    // Asistencia del COLEGIO (MW Panel) — lectura cross-schema de public.attendance_records
+    // del curso académico actual (isCurrent). Solo si el alumno está enlazado a MW Panel.
+    // Contrato: ver /opt/mw-secretaria/docs/CONTRATO_MWPANEL.md (public.attendance_records, lectura).
+    let colegioAttendance: any = { linked: false, academicYear: null, summary: null, history: [] };
+    if (student.mwpanelStudentId) {
+      const curYear = (await this.ds.query(
+        `SELECT name FROM public.academic_years WHERE "isCurrent"=true LIMIT 1`))[0];
+      const summary = (await this.ds.query(`
+        SELECT count(*) FILTER (WHERE ar.status='present')::int AS present,
+               count(*) FILTER (WHERE ar.status IN ('late','justified_late'))::int AS late,
+               count(*) FILTER (WHERE ar.status='early_departure')::int AS "earlyDeparture",
+               count(*) FILTER (WHERE ar.status='justified_absence')::int AS "justifiedAbsence",
+               count(*) FILTER (WHERE ar.status='absent')::int AS absent,
+               count(*)::int AS total
+        FROM public.attendance_records ar
+        JOIN public.academic_years ay ON ay.id=ar."academicYearId" AND ay."isCurrent"=true
+        WHERE ar."studentId"=$1`, [student.mwpanelStudentId]))[0];
+      const history = await this.ds.query(`
+        SELECT to_char(ar.date,'YYYY-MM-DD') AS date, ar.status
+        FROM public.attendance_records ar
+        JOIN public.academic_years ay ON ay.id=ar."academicYearId" AND ay."isCurrent"=true
+        WHERE ar."studentId"=$1 ORDER BY ar.date DESC`, [student.mwpanelStudentId]);
+      const total = summary?.total || 0;
+      // Política LOMLOE (igual que el boletín de MW Panel): retrasos y salidas anticipadas
+      // cuentan como asistencia; solo restan faltas justificadas e injustificadas.
+      const percentage = total > 0
+        ? Math.round(((total - (summary.absent || 0) - (summary.justifiedAbsence || 0)) / total) * 100)
+        : null;
+      colegioAttendance = {
+        linked: true,
+        academicYear: curYear?.name || null,
+        summary: total > 0 ? { ...summary, percentage } : null,
+        history,
+      };
+    }
+
+    return { student, guardians, enrollments, levelTests, documents, attendance, tasks, colegioAttendance };
   }
 
   @Get(':id/full') @Roles('secretaria_admin','secretaria_staff','direccion')

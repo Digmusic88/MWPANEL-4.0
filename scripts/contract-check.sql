@@ -32,7 +32,14 @@ BEGIN
             ('public','user_profiles','id'),
             ('public','user_profiles','userId'),
             ('public','user_profiles','firstName'),
-            ('public','user_profiles','lastName')
+            ('public','user_profiles','lastName'),
+            ('public','attendance_records','studentId'),
+            ('public','attendance_records','date'),
+            ('public','attendance_records','status'),
+            ('public','attendance_records','academicYearId'),
+            ('public','academic_years','id'),
+            ('public','academic_years','name'),
+            ('public','academic_years','isCurrent')
         ) AS t(sch, tbl, col)
     LOOP
         IF NOT EXISTS (

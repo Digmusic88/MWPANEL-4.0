@@ -70,6 +70,23 @@ Columnas del contrato en identidad:
 | `users` | id, email, passwordHash, role, isActive | lectura auth/chat + escritura provisión |
 | `user_profiles` | id, userId, firstName, lastName | lectura + escritura provisión |
 
+### Lectura directa de asistencia del colegio (asistencia en la ficha, 2026-07-04)
+La ficha del alumno de Secretaría (`students.controller.ts` `GET /students/:id/ficha`)
+lee `public.attendance_records` cross-schema para mostrar la asistencia del COLEGIO
+(MW Panel) del curso actual, junto a la de la academia. Solo para alumnos enlazados
+(`secretaria.students.mwpanel_student_id = public.students.id`), filtrando por el
+curso académico activo (`public.academic_years.isCurrent = true`). Solo lectura.
+
+| Tabla `public.*` | Columnas | Uso |
+|---|---|---|
+| `attendance_records` | studentId, date, status, academicYearId | lectura: resumen + historial diario de asistencia del colegio |
+| `academic_years` | id, name, isCurrent | lectura: resolver el curso activo y su etiqueta |
+
+El `status` es el enum inglés de MW Panel (`present`, `absent`, `late`,
+`justified_late`, `early_departure`, `justified_absence`). Política de cómputo
+(igual que el boletín): retrasos y salidas anticipadas cuentan como asistencia;
+solo restan faltas justificadas e injustificadas.
+
 ## Acoplamientos de seguridad
 
 - **`JWT_SECRET` compartido** entre MW Panel y Secretaría (Secretaría valida los

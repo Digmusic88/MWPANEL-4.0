@@ -51,9 +51,9 @@ export class InscriptionService {
       // 2) Tutores
       for (const guard of payload.guardians || []) {
         await m.query(
-          `INSERT INTO secretaria.guardians(family_id, full_name, relationship, phone, email, is_primary_contact)
-           VALUES ($1,$2,$3::secretaria.guardian_relationship,$4,$5,$6)`,
-          [familyId, guard.fullName, guard.relationship, guard.phone || null, guard.email || null, guard.isPrimary],
+          `INSERT INTO secretaria.guardians(family_id, full_name, relationship, nif, phone, email, is_primary_contact)
+           VALUES ($1,$2,$3::secretaria.guardian_relationship,$4,$5,$6,$7)`,
+          [familyId, guard.fullName, guard.relationship, guard.nif || null, guard.phone || null, guard.email || null, guard.isPrimary],
         );
       }
 

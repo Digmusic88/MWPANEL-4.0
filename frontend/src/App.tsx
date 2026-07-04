@@ -4646,6 +4646,7 @@ function InscripcionPdf() {
               <Space key={fld.key} wrap>
                 <Form.Item name={[fld.name,'fullName']} label="Nombre"><Input /></Form.Item>
                 <Form.Item name={[fld.name,'relationship']} label="Relación"><Select style={{ width: 120 }} options={[{value:'madre'},{value:'padre'},{value:'tutor'},{value:'otro'}]} /></Form.Item>
+                <Form.Item name={[fld.name,'nif']} label="DNI/NIE"><Input /></Form.Item>
                 <Form.Item name={[fld.name,'phone']} label="Teléfono"><Input /></Form.Item>
                 <Form.Item name={[fld.name,'email']} label="Email"><Input /></Form.Item>
               </Space>

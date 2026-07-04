@@ -1,6 +1,10 @@
 import { guessGender, genderToRelationship } from '../import/gender';
 
-export interface InscriptionGuardian { fullName: string; relationship: 'madre'|'padre'|'tutor'|'otro'; phone: string; email: string; isPrimary: boolean; }
+export interface InscriptionGuardian { fullName: string; relationship: 'madre'|'padre'|'tutor'|'otro'; nif: string; phone: string; email: string; isPrimary: boolean; }
+
+/** ¿El texto tiene forma de DNI (8 dígitos + letra) o NIE (X/Y/Z + 7 dígitos + letra)? */
+const looksLikeDni = (s: string): boolean => /^[XYZ]?\d{7,8}[A-Za-z]$/.test((s || '').replace(/[\s-]/g, ''));
+const normalizeDni = (s: string): string => (s || '').replace(/[\s-]/g, '').toUpperCase();
 export interface InscriptionBank { iban: string; holder: string; nif: string; bankName: string; }
 export interface InscriptionPreview {
   student: { firstName: string; lastName: string; birthDate: string | null; address: string; city: string; notes: string; photoConsent: boolean | null; exitConsent: boolean | null; medicalText: string; };
@@ -74,24 +78,39 @@ export function mapFieldsToInscription(f: Record<string,string>, group4: string|
   const exitConsent: boolean | null = null;
   warnings.push('Confirma manualmente los consentimientos de imagen y salidas (el PDF no los distingue con fiabilidad)');
 
-  // Tutores
+  // Tutores. ⚠️ En la plantilla, el campo "SEGUNDO APELLIDO" de cada tutor viene
+  // relleno EN LA PRÁCTICA con el DNI (no con el 2º apellido). Si el valor tiene forma
+  // de DNI/NIE lo guardamos como `nif` y NO lo concatenamos al nombre; si no, se trata
+  // como segundo apellido normal.
   const guardians: InscriptionGuardian[] = [];
-  const gName1 = join(g(f, 'NOMBRERow1_2'), g(f, 'PRIMER APELLIDORow1_2'), g(f, 'SEGUNDO APELLIDORow1_2'));
-  if (gName1) guardians.push({ fullName: gName1, relationship: relationshipFor(gName1), phone: g(f, 'TELÉFONORow1'), email: g(f, 'EMAILRow1'), isPrimary: true });
-  const gName2 = join(g(f, 'NOMBRERow1_3'), g(f, 'PRIMER APELLIDORow1_3'), g(f, 'SEGUNDO APELLIDORow1_3'));
-  if (gName2) guardians.push({ fullName: gName2, relationship: relationshipFor(gName2), phone: g(f, 'TELÉFONORow1_2'), email: g(f, 'EMAILRow1_2'), isPrimary: false });
-  const gName3 = join(g(f, 'NOMBRERow1_4'), g(f, 'PRIMER APELLIDORow1_4'), g(f, 'SEGUNDO APELLIDORow1_4'));
-  if (gName3) {
-    const rel = g(f, 'RELACIÓN CON EL ALUMNORow1').toLowerCase();
-    const relEnum: 'madre'|'padre'|'tutor'|'otro' = ['madre','padre','tutor'].includes(rel) ? (rel as any) : 'otro';
-    guardians.push({ fullName: gName3, relationship: relEnum, phone: g(f, 'TELÉFONORow1_3'), email: g(f, 'EMAILRow1_3'), isPrimary: false });
-  }
+  const pushGuardian = (
+    nameK: string, ape1K: string, ape2K: string, phoneK: string, emailK: string,
+    isPrimary: boolean, relOverride?: 'madre'|'padre'|'tutor'|'otro',
+  ) => {
+    const seg = g(f, ape2K);
+    const isDni = looksLikeDni(seg);
+    const fullName = join(g(f, nameK), g(f, ape1K), isDni ? '' : seg);
+    if (!fullName) return;
+    guardians.push({
+      fullName,
+      relationship: relOverride ?? relationshipFor(fullName),
+      nif: isDni ? normalizeDni(seg) : '',
+      phone: g(f, phoneK),
+      email: g(f, emailK),
+      isPrimary,
+    });
+  };
+  pushGuardian('NOMBRERow1_2', 'PRIMER APELLIDORow1_2', 'SEGUNDO APELLIDORow1_2', 'TELÉFONORow1', 'EMAILRow1', true);
+  pushGuardian('NOMBRERow1_3', 'PRIMER APELLIDORow1_3', 'SEGUNDO APELLIDORow1_3', 'TELÉFONORow1_2', 'EMAILRow1_2', false);
+  const rel3 = g(f, 'RELACIÓN CON EL ALUMNORow1').toLowerCase();
+  const rel3Enum: 'madre'|'padre'|'tutor'|'otro' = ['madre','padre','tutor'].includes(rel3) ? (rel3 as any) : 'otro';
+  pushGuardian('NOMBRERow1_4', 'PRIMER APELLIDORow1_4', 'SEGUNDO APELLIDORow1_4', 'TELÉFONORow1_3', 'EMAILRow1_3', false, rel3Enum);
   if (guardians.length === 0) warnings.push('No se detectó ningún tutor/contacto');
 
   // Familia (profesión de tutores + hermanos en notas)
   const famNotes: string[] = [];
-  const prof1 = g(f, 'PROFESIÓNRow1'); if (prof1) famNotes.push(`Profesión ${gName1 || 'contacto 1'}: ${prof1}`);
-  const prof2 = g(f, 'PROFESIÓNRow1_2'); if (prof2) famNotes.push(`Profesión ${gName2 || 'contacto 2'}: ${prof2}`);
+  const prof1 = g(f, 'PROFESIÓNRow1'); if (prof1) famNotes.push(`Profesión ${guardians[0]?.fullName || 'contacto 1'}: ${prof1}`);
+  const prof2 = g(f, 'PROFESIÓNRow1_2'); if (prof2) famNotes.push(`Profesión ${guardians[1]?.fullName || 'contacto 2'}: ${prof2}`);
   const hermanos = g(f, 'HERMANOSAS en el caso de que los hubieraRow1'); if (hermanos) famNotes.push(`Hermanos/as: ${hermanos}`);
 
   // Banco: componer IBAN de ES + Cuenta bancaria 2..6; solo si hay algo

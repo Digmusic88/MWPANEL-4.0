@@ -1,0 +1,6 @@
+firstName,lastName,email,dni,birthDate,educationalLevel
+Juan,García,juan.garcia@test.com,12345678A,2010-03-15,Primaria
+María,López,maria.lopez@test.com,23456789B,2010-05-22,Primaria
+Carlos,Martínez,carlos.martinez@test.com,34567890C,2010-01-08,Primaria
+Ana,Rodríguez,ana.rodriguez@test.com,45678901D,2010-07-30,Primaria
+Pedro,Sánchez,pedro.sanchez@test.com,56789012E,2010-11-12,Primaria

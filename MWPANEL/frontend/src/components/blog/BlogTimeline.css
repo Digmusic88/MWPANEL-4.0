@@ -1,0 +1,553 @@
+/* Blog Timeline Styles */
+
+/* ========================================
+   CSS VARIABLES
+   ======================================== */
+:root {
+  --blog-timeline-primary: #579172;
+  --blog-timeline-bg: #f8fafc;
+  --blog-timeline-text-dark: #1e293b;
+  --blog-timeline-text-light: #64748b;
+  --blog-timeline-border: #e2e8f0;
+  --blog-timeline-mobile-header-height: 50px;
+}
+
+/* ========================================
+   ANIMATIONS (defined globally)
+   ======================================== */
+
+@keyframes activePulse {
+  0%, 100% {
+    box-shadow: 0 0 0 4px rgba(87, 145, 114, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(87, 145, 114, 0.1);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ========================================
+   MOBILE VERSION (< 1025px)
+   Fixed horizontal bar at top
+   ======================================== */
+
+/* Base mobile styles - show on small screens */
+.blog-timeline-wrapper {
+  display: none; /* Hidden by default, shown via specific classes */
+}
+
+/* Mobile version - inline initially */
+.blog-timeline-wrapper.blog-timeline-mobile {
+  display: flex;
+  position: relative;
+  width: 100%;
+  height: auto;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  margin-bottom: 1rem;
+  padding: 0;
+  flex-direction: column;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  z-index: 100;
+  transition: box-shadow 0.2s ease, border-radius 0.2s ease;
+}
+
+/* When sticky - fixed at top after scrolling past header */
+.blog-timeline-wrapper.blog-timeline-mobile.is-sticky {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  border-radius: 0 !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-top: none !important;
+  margin: 0 !important;
+  z-index: 9999 !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: rgba(255, 255, 255, 0.98);
+}
+
+/* Mobile Header Bar (always visible) */
+.blog-timeline-mobile-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 8px 1rem;
+  width: 100%;
+  background: white;
+  border-bottom: 1px solid var(--blog-timeline-border);
+}
+
+/* Current post indicator for mobile */
+.blog-timeline-current-view {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+}
+
+.blog-timeline-current-label {
+  font-size: 0.65rem;
+  color: var(--blog-timeline-text-light);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.blog-timeline-current-text {
+  font-weight: 700;
+  color: var(--blog-timeline-primary);
+  max-width: 280px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Toggle button - hidden since always expanded */
+.blog-timeline-toggle-btn {
+  display: none;
+}
+
+/* Desktop header hidden on mobile */
+.blog-timeline-header {
+  display: none;
+}
+
+/* Scrollable container - always visible on mobile */
+.blog-timeline-scroll-container {
+  max-height: none;
+  overflow: visible;
+  background: var(--blog-timeline-bg);
+}
+
+/* Timeline in horizontal mode for mobile */
+.blog-timeline {
+  display: flex;
+  padding: 10px 1rem;
+  gap: 15px;
+  overflow-x: auto;
+  white-space: nowrap;
+  align-items: center;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.blog-timeline::-webkit-scrollbar {
+  display: none;
+}
+
+/* Remove vertical line in mobile */
+.blog-timeline::before {
+  display: none;
+}
+
+/* Year groups in horizontal layout */
+.blog-timeline-year-group {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+/* Year label mobile style */
+.blog-timeline-year-label {
+  margin-right: 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--blog-timeline-primary);
+  padding: 0;
+  background: transparent;
+  cursor: default;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.blog-timeline-year-label::before {
+  display: none;
+}
+
+.blog-timeline-year-chevron {
+  display: none;
+}
+
+/* Posts list - always visible in mobile horizontal */
+.blog-timeline-posts {
+  max-height: none !important;
+  opacity: 1 !important;
+  display: flex;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  overflow: visible;
+}
+
+/* Post pills for mobile */
+.blog-timeline-post {
+  margin: 0;
+  padding: 6px 14px;
+  background: white;
+  border: 1px solid var(--blog-timeline-border);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.blog-timeline-post:hover {
+  border-color: var(--blog-timeline-primary);
+  transform: none;
+}
+
+.blog-timeline-post.active {
+  background: var(--blog-timeline-primary);
+  border-color: var(--blog-timeline-primary);
+}
+
+.blog-timeline-post.active .blog-timeline-post-title,
+.blog-timeline-post.active .blog-timeline-post-date {
+  color: white !important;
+  font-weight: normal;
+}
+
+.blog-timeline-post a {
+  text-decoration: none;
+  display: block;
+}
+
+.blog-timeline-post-title {
+  font-size: 0.8rem;
+  color: var(--blog-timeline-text-dark);
+  white-space: nowrap;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.blog-timeline-post-date {
+  display: none;
+}
+
+/* Post dot hidden in mobile */
+.blog-timeline-post-dot {
+  display: none !important;
+}
+
+/* Mobile overlay - NOT USED */
+.blog-timeline-overlay {
+  display: none !important;
+}
+
+/* ========================================
+   SHOW TIMELINE ON TABLETS (LANDSCAPE) AND DESKTOPS
+   min-width: 1025px covers tablets landscape and up
+   ======================================== */
+@media (min-width: 1025px) {
+
+  /* Hide mobile elements on desktop */
+  .blog-timeline-mobile-header {
+    display: none !important;
+  }
+
+  .blog-timeline-scroll-container {
+    max-height: none !important;
+    overflow: visible !important;
+    background: transparent !important;
+    border-top: none !important;
+  }
+
+  /* Desktop version - styles are applied inline via React Portal */
+  .blog-timeline-wrapper.blog-timeline-desktop {
+    display: block;
+    animation: slideInRight 0.3s ease-out;
+  }
+
+  /* Scrollbar styling for timeline */
+  .blog-timeline-wrapper::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .blog-timeline-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .blog-timeline-wrapper::-webkit-scrollbar-thumb {
+    background: #e2e8f0;
+    border-radius: 2px;
+  }
+
+  .blog-timeline-wrapper::-webkit-scrollbar-thumb:hover {
+    background: #cbd5e1;
+  }
+
+  /* Header styles */
+  .blog-timeline-header {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .blog-timeline-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .blog-timeline-header .anticon {
+    font-size: 18px;
+    color: #579172;
+  }
+
+  /* Close button - NOT USED on desktop */
+  .blog-timeline-close-btn {
+    display: none;
+  }
+
+  .blog-timeline {
+    position: relative;
+    padding-left: 24px;
+    /* Reset mobile flex styles */
+    display: block;
+    gap: 0;
+    overflow-x: visible;
+    overflow-y: visible;
+    white-space: normal;
+    align-items: stretch;
+    scrollbar-width: auto;
+    -webkit-overflow-scrolling: auto;
+  }
+
+  /* The elegant vertical line */
+  .blog-timeline::before {
+    content: '';
+    display: block !important;
+    position: absolute;
+    left: 4px;
+    top: 10px;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, #579172 0%, #e2e8f0 80%, transparent 100%);
+    border-radius: 2px;
+  }
+
+  /* Year group styles */
+  .blog-timeline-year-group {
+    margin-bottom: 1rem;
+    /* Reset mobile flex */
+    display: block;
+    flex-shrink: 1;
+  }
+
+  /* Show year chevron in desktop */
+  .blog-timeline-year-chevron {
+    display: inline-block;
+  }
+
+  .blog-timeline-year-label {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #579172;
+    background: #f8fafc;
+    padding: 8px 0;
+    position: relative;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s;
+  }
+
+  .blog-timeline-year-label:hover {
+    color: #4a7d63;
+  }
+
+  .blog-timeline-year-text {
+    font-weight: 700;
+  }
+
+  .blog-timeline-year-count {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    font-weight: 500;
+  }
+
+  .blog-timeline-year-chevron {
+    font-size: 10px;
+    color: #94a3b8;
+    transition: transform 0.3s ease;
+    margin-left: auto;
+  }
+
+  .blog-timeline-year-chevron.rotated {
+    transform: rotate(180deg);
+  }
+
+  /* Year dot - centrado sobre la línea vertical (left: 4px + 1px = 5px desde blog-timeline) */
+  /* Con padding-left: 24px, el punto debe estar en -19px para centrarse */
+  .blog-timeline-year-label::before {
+    content: '';
+    position: absolute;
+    left: -19px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 10px;
+    height: 10px;
+    background: #579172;
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 0 0 2px #579172;
+  }
+
+  /* Collapsed year styles */
+  .blog-timeline-year-group.collapsed .blog-timeline-year-label {
+    color: #64748b;
+  }
+
+  .blog-timeline-year-group.collapsed .blog-timeline-year-label::before {
+    background: #94a3b8;
+    box-shadow: 0 0 0 2px #94a3b8;
+  }
+
+  .blog-timeline-year-group.collapsed:hover .blog-timeline-year-label::before {
+    background: #579172;
+    box-shadow: 0 0 0 2px #579172;
+  }
+
+  /* Year with active post highlight */
+  .blog-timeline-year-group.has-active .blog-timeline-year-label::before {
+    background: #579172;
+    box-shadow: 0 0 0 2px #579172, 0 0 0 6px rgba(87, 145, 114, 0.2);
+  }
+
+  /* Posts list - collapsible */
+  .blog-timeline-posts {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+    transition: max-height 0.4s ease, opacity 0.3s ease;
+    /* Reset mobile flex */
+    display: block !important;
+    gap: 0;
+    flex-direction: column;
+  }
+
+  .blog-timeline-posts.expanded {
+    max-height: 2000px !important;
+    opacity: 1 !important;
+    overflow: visible;
+  }
+
+  .blog-timeline-posts.collapsed {
+    max-height: 0 !important;
+    opacity: 0 !important;
+    overflow: hidden;
+  }
+
+  /* Individual post item */
+  .blog-timeline-post {
+    position: relative;
+    margin-bottom: 0.75rem;
+    padding-left: 0;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+    /* Reset mobile pill styles */
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    flex-shrink: 1;
+  }
+
+  .blog-timeline-post:hover {
+    transform: translateX(5px);
+    border-color: transparent;
+  }
+
+  /* Show post dot in desktop */
+  .blog-timeline-post-dot {
+    display: block !important;
+  }
+
+  .blog-timeline-post a {
+    text-decoration: none;
+    display: block;
+  }
+
+  .blog-timeline-post-date {
+    font-size: 0.75rem;
+    color: #64748b;
+    display: block !important;
+    margin-bottom: 2px;
+    text-transform: capitalize;
+  }
+
+  .blog-timeline-post-title {
+    font-size: 0.9rem;
+    color: #1e293b;
+    font-weight: 500;
+    line-height: 1.3;
+    transition: color 0.2s;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 200px;
+  }
+
+  .blog-timeline-post:hover .blog-timeline-post-title {
+    color: #579172;
+  }
+
+  /* Reset active post styles for desktop (not pill) */
+  .blog-timeline-post.active {
+    background: transparent;
+    border: none;
+  }
+
+  .blog-timeline-post.active .blog-timeline-post-title {
+    color: #579172 !important;
+    font-weight: 700 !important;
+  }
+
+  .blog-timeline-post.active .blog-timeline-post-date {
+    color: #579172 !important;
+    font-weight: 600 !important;
+  }
+
+  /* Post dot - ahora manejado con elemento span en JSX, no pseudo-elemento */
+  .blog-timeline-post::before {
+    display: none !important;
+    content: none !important;
+  }
+
+  .blog-timeline-post.active .blog-timeline-post-title {
+    color: #579172;
+    font-weight: 700;
+  }
+
+  .blog-timeline-post.active .blog-timeline-post-date {
+    color: #579172;
+    font-weight: 600;
+  }
+}

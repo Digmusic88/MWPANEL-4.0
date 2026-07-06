@@ -1,0 +1,269 @@
+name: PR Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  # Validación de PR
+  pr-validation:
+    name: PR Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check PR title
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          requireScope: false
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            El título del PR debe empezar con minúscula.
+            Ejemplo: "feat: agregar sistema de notificaciones"
+
+      - name: Check branch naming
+        run: |
+          BRANCH_NAME="${{ github.head_ref }}"
+          echo "Checking branch name: $BRANCH_NAME"
+          
+          # Patrón permitido: feature/*, fix/*, hotfix/*, release/*, chore/*
+          if ! echo "$BRANCH_NAME" | grep -qE '^(feature|fix|hotfix|release|chore)/[a-z0-9-]+$'; then
+            echo "❌ Branch name doesn't follow naming convention!"
+            echo "Expected format: {type}/{description}"
+            echo "Where type is: feature, fix, hotfix, release, or chore"
+            echo "Example: feature/add-user-authentication"
+            exit 1
+          fi
+          
+          echo "✅ Branch name is valid"
+
+      - name: Check PR size
+        uses: codelytv/pr-size-labeler@v1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          xs_label: 'size/XS'
+          xs_max_size: '10'
+          s_label: 'size/S'
+          s_max_size: '100'
+          m_label: 'size/M'
+          m_max_size: '500'
+          l_label: 'size/L'
+          l_max_size: '1000'
+          xl_label: 'size/XL'
+          fail_if_xl: 'false'
+          message_if_xl: |
+            Este PR es muy grande (más de 1000 líneas). 
+            Considera dividirlo en PRs más pequeños para facilitar la revisión.
+
+  # Análisis de código
+  code-analysis:
+    name: Code Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v40
+        with:
+          files_separator: '\n'
+
+      - name: Check for console.log in production code
+        run: |
+          echo "Checking for console.log statements..."
+          FOUND_CONSOLE_LOGS=false
+          
+          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+            if [[ $file == *.ts || $file == *.tsx ]] && [[ $file != *test* ]] && [[ $file != *spec* ]]; then
+              if grep -n "console\.\(log\|error\|warn\|info\)" "$file"; then
+                echo "❌ Found console statements in: $file"
+                FOUND_CONSOLE_LOGS=true
+              fi
+            fi
+          done
+          
+          if [ "$FOUND_CONSOLE_LOGS" = true ]; then
+            echo "::warning::Por favor, elimina los console.log del código de producción"
+          fi
+
+      - name: Check for TODO/FIXME comments
+        run: |
+          echo "Checking for TODO/FIXME comments..."
+          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+            if [[ $file == *.ts || $file == *.tsx || $file == *.js || $file == *.jsx ]]; then
+              grep -n "TODO\|FIXME\|HACK\|XXX" "$file" || true
+            fi
+          done
+
+  # Cobertura de tests
+  test-coverage:
+    name: Test Coverage Check
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: mwpanel_test
+          POSTGRES_PASSWORD: test123
+          POSTGRES_DB: mwpanel_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+          cache-dependency-path: mw-panel/backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./mw-panel/backend
+        run: npm ci
+
+      - name: Run tests with coverage
+        working-directory: ./mw-panel/backend
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USERNAME: mwpanel_test
+          DB_PASSWORD: test123
+          DB_DATABASE: mwpanel_test
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          JWT_SECRET: test-jwt-secret-key
+          JWT_REFRESH_SECRET: test-jwt-refresh-secret
+        run: |
+          npm run test:cov
+          echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          cat coverage/coverage-summary.json | jq -r '.total | "- Statements: \(.statements.pct)%\n- Branches: \(.branches.pct)%\n- Functions: \(.functions.pct)%\n- Lines: \(.lines.pct)%"' >> $GITHUB_STEP_SUMMARY || true
+
+      - name: Comment coverage on PR
+        uses: ArtiomTr/jest-coverage-report-action@v2
+        if: github.event_name == 'pull_request'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: ./mw-panel/backend
+          coverage-file: ./coverage/coverage-final.json
+          base-coverage-file: ./coverage/coverage-final.json
+          threshold: 30
+
+  # Preview deployment check
+  preview-check:
+    name: Preview Deployment Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Comment preview info
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.issue.number;
+            const prBranch = context.payload.pull_request.head.ref;
+            
+            const comment = `
+            ## 🚀 Preview Deployment Info
+            
+            - **Branch**: \`${prBranch}\`
+            - **PR**: #${prNumber}
+            - **Status**: ⏳ Pending manual deployment
+            
+            ### Para desplegar este PR en preview:
+            
+            \`\`\`bash
+            # En el servidor de staging
+            git fetch origin ${prBranch}
+            git checkout ${prBranch}
+            ./start-all-optimized.sh --clean
+            \`\`\`
+            
+            ### Checklist antes de merge:
+            - [ ] Tests pasando
+            - [ ] Sin console.log en producción
+            - [ ] Código revisado por al menos 1 persona
+            - [ ] Documentación actualizada si es necesario
+            - [ ] Sin conflictos con rama principal
+            `;
+            
+            // Buscar si ya existe un comentario de preview
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+            
+            const botComment = comments.data.find(comment => 
+              comment.body.includes('Preview Deployment Info')
+            );
+            
+            if (botComment) {
+              // Actualizar comentario existente
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: comment
+              });
+            } else {
+              // Crear nuevo comentario
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: comment
+              });
+            }

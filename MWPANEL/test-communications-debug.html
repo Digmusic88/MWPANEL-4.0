@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Communications Page</title>
+</head>
+<body>
+    <h1>Debug Communications Test</h1>
+    <div id="status">Loading...</div>
+    
+    <script>
+        console.log('🔍 DEBUG: Starting communications test');
+        
+        // Test if we can access the page at all
+        const status = document.getElementById('status');
+        
+        // Check if we're on the right path
+        console.log('🔍 DEBUG: Current URL:', window.location.href);
+        console.log('🔍 DEBUG: Current search params:', window.location.search);
+        
+        // Check for messageId parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const messageId = urlParams.get('messageId');
+        console.log('🔍 DEBUG: MessageId from URL:', messageId);
+        
+        // Test localStorage for auth token
+        const token = localStorage.getItem('access_token');
+        console.log('🔍 DEBUG: Auth token exists:', !!token);
+        console.log('🔍 DEBUG: Token length:', token ? token.length : 0);
+        
+        // Test API call to messages endpoint
+        if (token) {
+            fetch('/api/communications/messages', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                console.log('🔍 DEBUG: API Response status:', response.status);
+                console.log('🔍 DEBUG: API Response ok:', response.ok);
+                return response.json();
+            })
+            .then(data => {
+                console.log('🔍 DEBUG: API Response data:', data);
+                status.innerHTML = `✅ API Working - Got ${Array.isArray(data) ? data.length : 'unknown'} messages`;
+            })
+            .catch(error => {
+                console.error('🔍 DEBUG: API Error:', error);
+                status.innerHTML = `❌ API Error: ${error.message}`;
+            });
+        } else {
+            status.innerHTML = '❌ No auth token found';
+        }
+        
+        // Test if specific message exists
+        if (token && messageId) {
+            fetch(`/api/communications/messages/${messageId}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                console.log('🔍 DEBUG: Specific message response status:', response.status);
+                return response.json();
+            })
+            .then(data => {
+                console.log('🔍 DEBUG: Specific message data:', data);
+            })
+            .catch(error => {
+                console.error('🔍 DEBUG: Specific message error:', error);
+            });
+        }
+    </script>
+</body>
+</html>

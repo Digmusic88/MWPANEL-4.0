@@ -1,0 +1,460 @@
+/* Estilos para Dashboard DUA */
+
+.stat-card {
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.stat-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.stat-card-primary:hover {
+  border-color: #3F6E58;
+  box-shadow: 0 8px 24px rgba(87, 145, 114, 0.2);
+}
+
+.stat-card-success:hover {
+  border-color: #73d13d;
+  box-shadow: 0 8px 24px rgba(46, 125, 82, 0.2);
+}
+
+.stat-card-warning:hover {
+  border-color: #ffc53d;
+  box-shadow: 0 8px 24px rgba(180, 83, 9, 0.2);
+}
+
+.stat-card-error:hover {
+  border-color: #ff7875;
+  box-shadow: 0 8px 24px rgba(196, 48, 48, 0.2);
+}
+
+.stat-card-info:hover {
+  border-color: #3F6E58;
+  box-shadow: 0 8px 24px rgba(87, 145, 114, 0.2);
+}
+
+/* Animaciones para los indicadores */
+.stat-card .ant-statistic-content-value {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.stat-card .ant-progress-line {
+  margin-bottom: 0;
+}
+
+.stat-card .ant-tag {
+  border: none;
+  font-weight: 500;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Indicador de calidad de datos */
+.data-quality-indicator {
+  background: linear-gradient(135deg, #f9f9f9 0%, #f0f0f0 100%);
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.data-quality-indicator:hover {
+  border-color: #d9d9d9;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* Estilos responsivos */
+@media (max-width: 768px) {
+  .stat-card {
+    margin-bottom: 16px;
+  }
+  
+  .stat-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  
+  .stat-card .ant-statistic-content-value {
+    font-size: 24px !important;
+  }
+}
+
+@media (max-width: 576px) {
+  .stat-card .ant-statistic-content-value {
+    font-size: 20px !important;
+  }
+}
+
+/* Efectos de pulso para badges activos */
+.stat-card .ant-badge-dot {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Mejorar la visibilidad de los progress bars */
+.stat-card .ant-progress-bg {
+  border-radius: 4px !important;
+}
+
+.stat-card .ant-progress-inner {
+  border-radius: 4px !important;
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Estilos para las métricas de tiempo real */
+.realtime-metric {
+  position: relative;
+}
+
+.realtime-metric::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  background-color: #52c41a;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+/* Estilos para el filtro de fechas */
+.date-filter-dropdown {
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e8e8e8;
+}
+
+.date-filter-preset {
+  padding: 8px 12px;
+  margin: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.date-filter-preset:hover {
+  background-color: #f0f2f5;
+  transform: translateX(2px);
+}
+
+.date-filter-preset.active {
+  background: linear-gradient(135deg, #f0f9f4 0%, #e6f1ea 100%);
+  border: 1px solid #a9cdb8;
+  color: #579172;
+  font-weight: 500;
+}
+
+.date-filter-button {
+  border-radius: 6px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.date-filter-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  border-color: #3F6E58;
+}
+
+.date-filter-button.active {
+  background: linear-gradient(135deg, #f0f9f4 0%, #e6f1ea 100%);
+  border-color: #3F6E58;
+  color: #579172;
+}
+
+/* Estilos para el indicador de período activo */
+.period-indicator {
+  background: linear-gradient(135deg, #f6ffed 0%, #f0f9f4 100%);
+  border: 1px solid #b7eb8f;
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.period-indicator::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #52c41a 0%, #73d13d 100%);
+}
+
+.period-badge {
+  background: #52c41a;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  position: absolute;
+  top: -6px;
+  left: 12px;
+  box-shadow: 0 2px 4px rgba(82, 196, 26, 0.3);
+}
+
+/* Animaciones para el cambio de período */
+.period-transition {
+  animation: periodChange 0.5s ease-out;
+}
+
+@keyframes periodChange {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Responsive adjustments for date filter */
+@media (max-width: 768px) {
+  .date-filter-button {
+    min-width: 150px;
+    font-size: 11px;
+  }
+  
+  .period-indicator {
+    margin-top: 8px;
+    padding: 8px;
+  }
+  
+  .period-badge {
+    font-size: 9px;
+    padding: 1px 6px;
+  }
+}
+
+@media (max-width: 576px) {
+  .date-filter-button {
+    min-width: 120px;
+    font-size: 10px;
+  }
+  
+  .date-filter-preset {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+}
+
+/* Estilos para el modal de exportación */
+.export-modal .ant-modal-header {
+  border-bottom: 2px solid #f0f2f5;
+  padding: 20px 24px;
+}
+
+.export-modal .ant-modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #579172;
+}
+
+.export-modal .ant-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+}
+
+.export-modal .ant-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.export-modal .ant-card-head {
+  border-bottom: 1px solid #f0f2f5;
+  min-height: 48px;
+}
+
+.export-modal .ant-card-head-title {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 12px 0;
+}
+
+/* Estilos para las opciones de formato */
+.export-format-option {
+  transition: all 0.3s ease;
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.export-format-option:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+}
+
+.export-format-option.selected {
+  border-color: #579172 !important;
+  box-shadow: 0 0 0 2px rgba(87, 145, 114, 0.2);
+}
+
+/* Estilos para los switches de contenido */
+.export-content-switch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 16px;
+  border: 1px solid #f0f2f5;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.export-content-switch:hover {
+  border-color: #d9d9d9;
+  background-color: #fafafa;
+}
+
+.export-content-switch .ant-switch {
+  margin-bottom: 8px;
+}
+
+/* Vista previa del reporte */
+.export-preview {
+  background: linear-gradient(135deg, #f6faf8 0%, #ffffff 100%);
+  border: 1px solid #d9ece2;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.export-preview .ant-typography {
+  margin-bottom: 4px;
+}
+
+/* Progreso de exportación */
+.export-progress {
+  background: linear-gradient(135deg, #f0f9f4 0%, #e6f1ea 100%);
+  border: 1px solid #a9cdb8;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.export-progress .ant-progress-line {
+  margin-bottom: 0;
+}
+
+.export-progress .ant-progress-text {
+  font-weight: 500;
+}
+
+/* Animaciones para el modal */
+.export-modal-enter {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.export-modal-enter-active {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 300ms, transform 300ms;
+}
+
+.export-modal-exit {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.export-modal-exit-active {
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 300ms, transform 300ms;
+}
+
+/* Botones del modal */
+.export-modal .ant-btn-primary {
+  background: linear-gradient(135deg, #579172 0%, #3F6E58 100%);
+  border: none;
+  box-shadow: 0 2px 8px rgba(87, 145, 114, 0.3);
+  transition: all 0.3s ease;
+}
+
+.export-modal .ant-btn-primary:hover {
+  background: linear-gradient(135deg, #3F6E58 0%, #579172 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(87, 145, 114, 0.4);
+}
+
+.export-modal .ant-btn-primary:disabled {
+  background: #f5f5f5;
+  color: #bfbfbf;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Responsive para el modal de exportación */
+@media (max-width: 768px) {
+  .export-modal {
+    margin: 0;
+    max-width: 100vw;
+  }
+  
+  .export-format-option {
+    padding: 12px;
+  }
+  
+  .export-content-switch {
+    padding: 12px;
+  }
+  
+  .export-modal .ant-modal-body {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 576px) {
+  .export-modal .ant-card {
+    margin-bottom: 12px;
+  }
+  
+  .export-modal .ant-card-head-title {
+    font-size: 13px;
+  }
+  
+  .export-format-option {
+    padding: 8px;
+  }
+}

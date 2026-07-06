@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limpiar Autenticación - MW Panel</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+        
+        .icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+        
+        p {
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            margin: 10px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .success {
+            color: #10b981;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+        
+        .info {
+            background: #f0f9ff;
+            border: 1px solid #0ea5e9;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            color: #0c4a6e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🔐</div>
+        <h1>Limpiar Autenticación</h1>
+        <p>
+            Se han detectado tokens de autenticación inválidos o expirados. 
+            Haz clic en el botón para limpiar la autenticación y poder hacer login nuevamente.
+        </p>
+        
+        <button class="btn" onclick="clearAuth()">🧹 Limpiar Autenticación</button>
+        <button class="btn" onclick="goToLogin()">🚀 Ir al Login</button>
+        
+        <div id="result"></div>
+        
+        <div class="info">
+            <strong>📋 ¿Qué hace esto?</strong><br>
+            • Elimina tokens JWT expirados<br>
+            • Limpia datos de sesión almacenados<br>
+            • Te prepara para un nuevo login<br>
+        </div>
+    </div>
+
+    <script>
+        function clearAuth() {
+            try {
+                // Limpiar localStorage
+                localStorage.removeItem('mw-panel-auth');
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('refresh_token');
+                localStorage.removeItem('user');
+                
+                // Limpiar sessionStorage
+                sessionStorage.clear();
+                
+                // Limpiar cookies relacionadas con auth
+                document.cookie.split(";").forEach(function(c) { 
+                    document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+                });
+                
+                document.getElementById('result').innerHTML = 
+                    '<div class="success">✅ Autenticación limpiada correctamente</div>';
+                
+                // Auto-redirect after 2 seconds
+                setTimeout(() => {
+                    goToLogin();
+                }, 2000);
+                
+            } catch (error) {
+                document.getElementById('result').innerHTML = 
+                    '<div style="color: #ef4444;">❌ Error: ' + error.message + '</div>';
+            }
+        }
+        
+        function goToLogin() {
+            window.location.href = '/';
+        }
+        
+        // Auto-clear if accessed directly
+        if (window.location.search.includes('auto=true')) {
+            clearAuth();
+        }
+    </script>
+</body>
+</html>

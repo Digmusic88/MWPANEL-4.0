@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cache Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+    <h1>MW Panel Cache Test</h1>
+    <p>Timestamp: <span id="timestamp"></span></p>
+    
+    <div class="test">
+        <h3>Cache Busting Test</h3>
+        <button onclick="testCache()">Test Current Cache Status</button>
+        <div id="cacheResult"></div>
+    </div>
+    
+    <div class="test">
+        <h3>Force Reload Actions</h3>
+        <button onclick="hardReload()">Hard Reload (Ctrl+F5)</button>
+        <button onclick="clearStorage()">Clear Storage + Reload</button>
+        <button onclick="disableCache()">Disable Cache (DevTools)</button>
+    </div>
+    
+    <div class="test">
+        <h3>Debug Information</h3>
+        <div id="debugInfo"></div>
+    </div>
+
+    <script>
+        document.getElementById('timestamp').textContent = new Date().toISOString();
+        
+        function testCache() {
+            fetch('/index-FORCED-1755616016484.js?t=' + Date.now(), {
+                cache: 'no-cache',
+                headers: { 'Cache-Control': 'no-cache' }
+            })
+            .then(response => response.text())
+            .then(content => {
+                const hasNewDebugging = content.includes('20250819162500');
+                const hasOldTimestamp = content.includes('20250721_205528');
+                
+                document.getElementById('cacheResult').innerHTML = `
+                    <p><strong>File Size:</strong> ${content.length} bytes</p>
+                    <p><strong>Has New App Debugging:</strong> ${hasNewDebugging ? '✅ YES' : '❌ NO'}</p>
+                    <p><strong>Has Old Timestamp:</strong> ${hasOldTimestamp ? '⚠️ YES (problem)' : '✅ NO (good)'}</p>
+                    <p><strong>Status:</strong> ${hasNewDebugging ? 'NEW FILE LOADED' : 'OLD FILE STILL CACHED'}</p>
+                `;
+            })
+            .catch(error => {
+                document.getElementById('cacheResult').innerHTML = `<p style="color:red">Error: ${error}</p>`;
+            });
+        }
+        
+        function hardReload() {
+            location.reload(true);
+        }
+        
+        function clearStorage() {
+            localStorage.clear();
+            sessionStorage.clear();
+            if ('caches' in window) {
+                caches.keys().then(keys => keys.forEach(key => caches.delete(key)));
+            }
+            setTimeout(() => location.reload(true), 100);
+        }
+        
+        function disableCache() {
+            alert('Open DevTools (F12) → Network Tab → Check "Disable cache" → Reload page');
+        }
+        
+        // Display debug info
+        document.getElementById('debugInfo').innerHTML = `
+            <p><strong>User Agent:</strong> ${navigator.userAgent}</p>
+            <p><strong>Location:</strong> ${window.location.href}</p>
+            <p><strong>Referrer:</strong> ${document.referrer}</p>
+            <p><strong>Cookies:</strong> ${document.cookie.substring(0, 100)}...</p>
+        `;
+        
+        // Auto-test on load
+        setTimeout(testCache, 1000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MW Panel - Limpiar Cache del Navegador</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            line-height: 1.6;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            background: rgba(255,255,255,0.1);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+        h1 { color: #fff; margin-bottom: 20px; }
+        h2 { color: #e3f2fd; margin-top: 30px; }
+        .step {
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #4caf50;
+        }
+        .success {
+            background: rgba(76, 175, 80, 0.2);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .test-button {
+            display: inline-block;
+            background: #4caf50;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 6px;
+            margin: 10px 5px;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+        }
+        .test-button:hover {
+            background: #45a049;
+            color: white;
+        }
+        code {
+            background: rgba(0,0,0,0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Consolas', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔄 MW Panel - Cache del Navegador Actualizado</h1>
+        
+        <div class="success">
+            ✅ <strong>Frontend actualizado exitosamente</strong><br>
+            📅 Timestamp: <code>1755615404466</code><br>
+            🎯 Los greetings dinámicos están incluidos en el nuevo build
+        </div>
+
+        <h2>🧹 Para ver los cambios inmediatamente:</h2>
+        
+        <div class="step">
+            <strong>Método 1: Recarga forzada (Recomendado)</strong><br>
+            • Windows/Linux: <code>Ctrl + F5</code><br>
+            • Mac: <code>Cmd + Shift + R</code>
+        </div>
+        
+        <div class="step">
+            <strong>Método 2: Recarga sin cache</strong><br>
+            • Windows/Linux: <code>Ctrl + Shift + R</code><br>
+            • Mac: <code>Cmd + Option + R</code>
+        </div>
+        
+        <div class="step">
+            <strong>Método 3: Herramientas de desarrollador</strong><br>
+            1. Presiona <code>F12</code> (DevTools)<br>
+            2. Click derecho en botón de recarga<br>
+            3. Selecciona "Vaciar caché y recargar forzado"
+        </div>
+
+        <h2>🧪 Probar funcionamiento:</h2>
+        
+        <a href="https://plataforma.mundoworld.school/" class="test-button" target="_blank">
+            🏠 Ir al Dashboard
+        </a>
+        
+        <a href="javascript:window.location.reload(true);" class="test-button">
+            🔄 Recargar esta página
+        </a>
+
+        <h2>✨ Qué esperar:</h2>
+        
+        <div class="step">
+            <strong>Greetings dinámicos funcionando:</strong><br>
+            🌅 <strong>Buenos días</strong> (6:00 - 13:59) con icono de sol<br>
+            🌤️ <strong>Buenas tardes</strong> (14:00 - 19:59) con icono de nube<br>
+            🌙 <strong>Buenas noches</strong> (20:00 - 5:59) con icono de luna
+        </div>
+
+        <h2>🔍 Verificación técnica:</h2>
+        
+        <div class="step">
+            Para verificar que el nuevo código se cargó:<br>
+            1. Abre DevTools (F12)<br>
+            2. Ve a la pestaña "Console"<br>
+            3. Busca: <code>DYNAMIC_GREETING_COMPONENT_LOADED_SUCCESS</code><br>
+            4. Si aparece, los greetings dinámicos están funcionando
+        </div>
+
+        <p style="text-align: center; margin-top: 30px; opacity: 0.8;">
+            <small>MW Panel 2.0 - Sistema de Cache Busting Activo</small>
+        </p>
+    </div>
+</body>
+</html>

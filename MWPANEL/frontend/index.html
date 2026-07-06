@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Favicon principal -->
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    
+    <!-- Apple touch icons - Logo cuadrado para marcadores iOS -->
+    <link rel="apple-touch-icon" sizes="152x152" href="/apple-touch-icon-152x152.png" />
+    <link rel="apple-touch-icon" sizes="144x144" href="/apple-touch-icon-144x144.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="/apple-touch-icon-120x120.png" />
+    <link rel="apple-touch-icon" sizes="114x114" href="/apple-touch-icon-114x114.png" />
+    <link rel="apple-touch-icon" sizes="76x76" href="/apple-touch-icon-76x76.png" />
+    <link rel="apple-touch-icon" sizes="72x72" href="/apple-touch-icon-72x72.png" />
+    <link rel="apple-touch-icon" sizes="60x60" href="/apple-touch-icon-60x60.png" />
+    <link rel="apple-touch-icon" sizes="57x57" href="/apple-touch-icon-57x57.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    
+    <!-- Meta tags adicionales para iOS -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="MW Panel" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/site.webmanifest" />
+    <!-- Viewport tipo app: sin zoom con los dedos y siempre ajustado al ancho del móvil -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="theme-color" content="#579172" />
+    <meta name="description" content="MW Panel - Sistema de Gestión Escolar" />
+    <meta name="keywords" content="gestión escolar, educación, estudiantes, profesores" />
+    <title>MW Panel - Sistema de Gestión Escolar</title>
+
+    <!-- Estilo app en móvil: nunca scroll horizontal, pero SIN romper el scroll vertical.
+         overflow-x: clip evita el desbordamiento horizontal sin crear un contenedor de
+         scroll (a diferencia de overflow-x: hidden, que sí rompía el scroll de la rueda). -->
+    <style>
+      html, body {
+        max-width: 100%;
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      body { overscroll-behavior-x: none; }
+      #root { overflow-x: clip; max-width: 100%; }
+      * { -webkit-tap-highlight-color: transparent; }
+    </style>
+
+    <!-- ReactQuill is loaded via npm package - no CDN needed -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

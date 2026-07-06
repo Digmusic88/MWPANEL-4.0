@@ -1,0 +1,10 @@
+export { CreateResourceDto } from './create-resource.dto';
+export { UpdateResourceDto } from './update-resource.dto';
+export { ResourceFiltersDto } from './resource-filters.dto';
+export { AssignResourceDto } from './assign-resource.dto';
+export { CreateFolderDto } from './create-folder.dto';
+export { UpdateFolderDto } from './update-folder.dto';
+export { ReorderResourcesDto, ResourceOrderItem } from './reorder-resources.dto';
+export { MoveResourceDto } from './move-resource.dto';
+export { ReorderFoldersDto, FolderOrderItem } from './reorder-folders.dto';
+export { CreateLinkResourceDto } from './create-link-resource.dto';

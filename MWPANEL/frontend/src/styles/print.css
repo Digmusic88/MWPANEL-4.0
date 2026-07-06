@@ -1,0 +1,231 @@
+/* Estilos específicos para impresión de horarios */
+@media print {
+  /* Configuración de página */
+  @page {
+    size: A4 landscape; /* Formato horizontal */
+    margin: 10mm;
+    margin-top: 5mm;
+    margin-bottom: 5mm;
+  }
+
+  /* Ocultar elementos no necesarios para impresión */
+  .no-print,
+  .print-hide {
+    display: none !important;
+  }
+
+  /* Solo mostrar el contenido del horario */
+  .print-only-schedule {
+    display: block !important;
+  }
+
+  /* Estilos para el contenedor del horario */
+  .schedule-print-container {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: white !important;
+  }
+
+  /* Título del horario para impresión */
+  .schedule-print-title {
+    text-align: center !important;
+    font-size: 18px !important;
+    font-weight: bold !important;
+    margin-bottom: 15px !important;
+    color: black !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Tabla del horario */
+  .schedule-print-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 11px !important;
+    margin: 0 !important;
+  }
+
+  .schedule-print-table th,
+  .schedule-print-table td {
+    border: 1px solid #333 !important;
+    padding: 4px !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Encabezados de la tabla */
+  .schedule-print-table th {
+    background-color: #f0f0f0 !important;
+    font-weight: bold !important;
+    font-size: 12px !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Celdas de horario */
+  .schedule-print-table .time-header {
+    background-color: #f5f5f5 !important;
+    font-weight: bold !important;
+    width: 80px !important;
+    font-size: 10px !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Celdas de asignaturas */
+  .schedule-print-cell {
+    height: 50px !important;
+    min-height: 50px !important;
+    max-height: 50px !important;
+    overflow: hidden !important;
+    font-size: 9px !important;
+    line-height: 1.1 !important;
+    padding: 2px !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Contenido de las celdas */
+  .schedule-print-cell .subject-name {
+    font-weight: bold !important;
+    font-size: 10px !important;
+    margin-bottom: 2px !important;
+    color: inherit !important;
+  }
+
+  .schedule-print-cell .teacher-name {
+    font-size: 8px !important;
+    margin-bottom: 1px !important;
+    color: inherit !important;
+  }
+
+  .schedule-print-cell .classroom-code {
+    font-size: 8px !important;
+    color: inherit !important;
+  }
+
+  /* Celdas vacías */
+  .schedule-print-cell.empty {
+    background-color: #f9f9f9 !important;
+    color: #999 !important;
+    font-style: italic !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ajustes para colores de asignaturas en impresión */
+  .schedule-print-cell[data-subject="matematicas"] {
+    background-color: #e3f2fd !important;
+    border-color: #1976d2 !important;
+    color: #0d47a1 !important;
+  }
+
+  .schedule-print-cell[data-subject="lengua"] {
+    background-color: #ffebee !important;
+    border-color: #d32f2f !important;
+    color: #b71c1c !important;
+  }
+
+  .schedule-print-cell[data-subject="ciencias-naturales"] {
+    background-color: #e8f5e8 !important;
+    border-color: #388e3c !important;
+    color: #1b5e20 !important;
+  }
+
+  .schedule-print-cell[data-subject="ciencias-sociales"] {
+    background-color: #fff3e0 !important;
+    border-color: #f57c00 !important;
+    color: #e65100 !important;
+  }
+
+  .schedule-print-cell[data-subject="ingles"] {
+    background-color: #f3e5f5 !important;
+    border-color: #7b1fa2 !important;
+    color: #4a148c !important;
+  }
+
+  .schedule-print-cell[data-subject="educacion-fisica"] {
+    background-color: #e0f2f1 !important;
+    border-color: #00695c !important;
+    color: #004d40 !important;
+  }
+
+  .schedule-print-cell[data-subject="educacion-artistica"] {
+    background-color: #fce4ec !important;
+    border-color: #c2185b !important;
+    color: #880e4f !important;
+  }
+
+  .schedule-print-cell[data-subject="musica"] {
+    background-color: #fff8e1 !important;
+    border-color: #ffa000 !important;
+    color: #ff6f00 !important;
+  }
+
+  /* Información adicional del horario */
+  .schedule-print-info {
+    margin-top: 10px !important;
+    font-size: 10px !important;
+    color: #666 !important;
+    text-align: center !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Evitar saltos de página en elementos críticos */
+  .schedule-print-container,
+  .schedule-print-table {
+    page-break-inside: avoid !important;
+  }
+
+  /* Forzar impresión en una sola página si es posible */
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Mostrar solo el contenido del horario visible */
+  .schedule-grid-table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    font-size: 10px !important;
+  }
+
+  .schedule-grid-table th,
+  .schedule-grid-table td {
+    border: 1px solid #333 !important;
+    padding: 3px !important;
+    font-size: 9px !important;
+    line-height: 1.1 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .schedule-grid-table th {
+    background-color: #f0f0f0 !important;
+    font-weight: bold !important;
+    text-align: center !important;
+  }
+
+  /* Preservar colores de las celdas del horario */
+  .schedule-cell {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* Ajustar celdas vacías para impresión */
+  .schedule-grid-table td > div[style*="border: 1px dashed"] {
+    border: 1px solid #ccc !important;
+    background-color: #f9f9f9 !important;
+    color: #666 !important;
+    font-size: 8px !important;
+    height: 40px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+}

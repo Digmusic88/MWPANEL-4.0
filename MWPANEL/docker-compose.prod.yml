@@ -1,0 +1,292 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database - Optimizado para producción
+  postgres:
+    image: postgres:15-alpine
+    container_name: mw-panel-db-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-mwpanel}
+      POSTGRES_USER: ${DB_USER:-mwpanel}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=es_ES.UTF-8"
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./deploy/postgres/postgresql.prod.conf:/etc/postgresql/postgresql.conf:ro
+    ports:
+      - "127.0.0.1:5432:5432"  # Solo accesible localmente
+    networks:
+      - mw-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-mwpanel} -d ${DB_NAME:-mwpanel}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.track=all
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=4MB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # Redis Cache - Optimizado para producción
+  redis:
+    image: redis:7-alpine
+    container_name: mw-panel-redis-prod
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --tcp-keepalive 60
+      --timeout 300
+      --tcp-backlog 511
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    ports:
+      - "127.0.0.1:6379:6379"  # Solo accesible localmente
+    volumes:
+      - redis_data_prod:/data
+    networks:
+      - mw-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # Backend API (NestJS) - Optimizado para producción
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+      args:
+        NODE_ENV: production
+    container_name: mw-panel-backend-prod
+    restart: unless-stopped
+
+    # SEGURIDAD: Filesystem read-only (previene escritura de malware)
+    read_only: true
+
+    # Directorios temporales en memoria
+    tmpfs:
+      - /tmp:size=200M,mode=1777
+      - /app/.npm:size=50M,mode=1777
+      - /app/reports:size=100M,mode=1777
+
+    # Límites de seguridad adicionales
+    security_opt:
+      - no-new-privileges:true
+
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      TZ: Europe/Madrid
+      DATABASE_URL: postgresql://${DB_USER:-mwpanel}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-mwpanel}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      CORS_ORIGIN: https://${DOMAIN}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-15}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      # Email Provider Configuration (Resend)
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-resend}
+      RESEND_API_KEY: ${RESEND_API_KEY:-re_4i33V69C_8cBXkLJ3jT4gNg4zKurTcSHS}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-no-reply@mundoworld.school}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Mundo World School}
+      # Google Drive Configuration
+      GOOGLE_SHARED_DRIVE_NAME: ${GOOGLE_SHARED_DRIVE_NAME:-}
+      GOOGLE_SHARED_DRIVE_ID: ${GOOGLE_SHARED_DRIVE_ID:-}
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - backend_logs:/app/logs
+      - ./time-machine-backups:/app/time-machine-backups
+      - ./local-backups:/app/backups
+      - ./backend/google-credentials.json:/app/google-credentials.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:3000"  # Solo accesible localmente (correcto para proxy)
+    networks:
+      - mw-network
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/api/health/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Frontend (React + Vite) - Build de producción
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_URL: https://${DOMAIN}/api
+    container_name: mw-panel-frontend-prod
+    restart: unless-stopped
+
+    # SEGURIDAD: Filesystem read-only (previene escritura de malware)
+    read_only: true
+
+    # Directorios temporales en memoria (necesarios para nginx)
+    tmpfs:
+      - /tmp:size=50M,mode=1777
+      - /var/cache/nginx:size=50M,mode=1777
+      - /var/run:size=10M,mode=1777
+
+    # Límites de seguridad adicionales
+    security_opt:
+      - no-new-privileges:true
+
+    networks:
+      - mw-network
+    depends_on:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # Nginx Reverse Proxy con SSL
+  nginx:
+    image: nginx:alpine
+    container_name: mw-panel-nginx-prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.ssl.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./backend/uploads:/usr/share/nginx/uploads:ro
+      - nginx_logs:/var/log/nginx
+      - nginx_cache:/var/cache/nginx
+    environment:
+      - DOMAIN=${DOMAIN}
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - mw-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Certbot para renovación automática SSL
+  certbot:
+    image: certbot/certbot:latest
+    container_name: mw-panel-certbot-prod
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt
+      - /var/lib/letsencrypt:/var/lib/letsencrypt
+    depends_on:
+      - nginx
+    command: >
+      sh -c "
+        trap exit TERM;
+        while :; do
+          certbot renew --webroot --webroot-path=/usr/share/nginx/html --quiet;
+          sleep 12h & wait $$$$;
+        done
+      "
+    restart: unless-stopped
+    networks:
+      - mw-network
+
+  # Watchtower para actualizaciones automáticas (opcional)
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: mw-panel-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=3600  # Check every hour
+      - WATCHTOWER_ROLLING_RESTART=true
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+    command: --interval 3600 --cleanup
+    networks:
+      - mw-network
+
+volumes:
+  pgdata_prod:
+    external: true
+    name: mw-panel-pgdata
+  redis_data_prod:
+  backend_logs:
+  nginx_logs:
+  nginx_cache:
+
+networks:
+  mw-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

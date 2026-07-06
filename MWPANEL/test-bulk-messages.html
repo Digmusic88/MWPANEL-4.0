@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Mensajes Bulk - MW Panel</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            background: #f5f5f5;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #007bff;
+        }
+        .result {
+            background: #e8f5e8;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .error {
+            background: #ffe8e8;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test de Funcionalidad - Mensajes Bulk</h1>
+
+    <div class="test-section">
+        <h2>1. Verificación de Endpoint Backend</h2>
+        <p>Probando el endpoint <code>/api/communications/messages/bulk</code></p>
+        <button onclick="testBulkEndpoint()">Probar Endpoint Bulk</button>
+        <div id="bulkEndpointResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Test de Autenticación</h2>
+        <p>Verificando que el sistema de auth funciona para endpoints bulk</p>
+        <button onclick="testAuthentication()">Verificar Auth</button>
+        <div id="authResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Acceso a Frontend</h2>
+        <p>Enlaces para acceder y probar manualmente:</p>
+        <button onclick="window.open('https://plataforma.mundoworld.school/login', '_blank')">Ir a Login</button>
+        <button onclick="window.open('https://plataforma.mundoworld.school/admin/communications/messages', '_blank')">Ir a Mensajes (Admin)</button>
+        <button onclick="window.open('https://plataforma.mundoworld.school/teacher/communications/messages', '_blank')">Ir a Mensajes (Profesor)</button>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Credenciales de Prueba</h2>
+        <div class="result">
+            <p><strong>Admin:</strong> info@mundoworld.school / admin123</p>
+            <p><strong>Profesor:</strong> profesor@mwpanel.com / profesor123</p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>5. Funcionalidades Implementadas</h2>
+        <div class="result">
+            <h3>✅ Backend:</h3>
+            <ul>
+                <li>Endpoint <code>/api/communications/messages/bulk</code></li>
+                <li>Validación de múltiples destinatarios</li>
+                <li>Creación de mensajes individuales para cada destinatario</li>
+                <li>Respuesta con conteo de destinatarios</li>
+            </ul>
+
+            <h3>✅ Frontend:</h3>
+            <ul>
+                <li>Select múltiple con búsqueda avanzada</li>
+                <li>Botones "Todas las familias" y "Todos los profesores"</li>
+                <li>Panel informativo de destinatarios seleccionados</li>
+                <li>Conteo por roles con tags coloridos</li>
+                <li>Detección automática bulk vs individual</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        async function testBulkEndpoint() {
+            const resultDiv = document.getElementById('bulkEndpointResult');
+            resultDiv.innerHTML = '<p>Probando endpoint...</p>';
+
+            try {
+                const response = await fetch('https://plataforma.mundoworld.school/api/communications/messages/bulk', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        subject: 'Test Bulk Message',
+                        content: 'Mensaje de prueba para bulk',
+                        recipientIds: ['test-id-1', 'test-id-2'],
+                        type: 'direct',
+                        priority: 'normal'
+                    })
+                });
+
+                const status = response.status;
+                const text = await response.text();
+
+                if (status === 401) {
+                    resultDiv.innerHTML = '<div class="result">✅ Endpoint existe - Requiere autenticación (401)</div>';
+                } else if (status === 403) {
+                    resultDiv.innerHTML = '<div class="result">✅ Endpoint existe - Requiere permisos admin/teacher (403)</div>';
+                } else {
+                    resultDiv.innerHTML = `<div class="result">📡 Status: ${status}<br>Respuesta: ${text}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        }
+
+        async function testAuthentication() {
+            const resultDiv = document.getElementById('authResult');
+            resultDiv.innerHTML = '<p>Verificando sistema de auth...</p>';
+
+            try {
+                const response = await fetch('https://plataforma.mundoworld.school/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'info@mundoworld.school',
+                        password: 'admin123'
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    resultDiv.innerHTML = '<div class="result">✅ Sistema de autenticación funcionando correctamente</div>';
+                } else {
+                    resultDiv.innerHTML = '<div class="error">❌ Error en autenticación</div>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

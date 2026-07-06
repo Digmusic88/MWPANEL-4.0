@@ -1,0 +1,23 @@
+.fade-in {
+  opacity: 0;
+  animation: fadeIn 1s ease-in forwards;
+}
+
+@keyframes fadeIn {
+  to {
+    opacity: 1;
+  }
+}
+
+.dot-anim::after {
+  content: '.';
+  animation: dots 1.2s steps(4, end) infinite;
+}
+
+@keyframes dots {
+  0%   { content: '.'; }
+  25%  { content: '..'; }
+  50%  { content: '...'; }
+  75%  { content: '.'; }
+  100% { content: '.'; }
+}

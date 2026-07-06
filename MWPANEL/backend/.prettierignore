@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+build/
+
+# Generated files
+*.generated.ts
+*.generated.js
+
+# Migration files (preserve formatting)
+src/database/migrations/
+
+# Config files
+.env*
+*.log
+
+# Coverage
+coverage/
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.temp

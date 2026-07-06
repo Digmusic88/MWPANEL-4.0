@@ -1,0 +1,241 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Pre-deployment checks
+  pre-deploy:
+    name: Pre-deployment Checks
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.check.outputs.should_deploy }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check deployment conditions
+        id: check
+        run: |
+          # Check if it's a hotfix or regular deployment
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if [[ "$COMMIT_MSG" == *"[skip-deploy]"* ]]; then
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+            echo "⏭️ Skipping deployment (commit message contains [skip-deploy])"
+          else
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "✅ Deployment will proceed"
+          fi
+
+  # Build and push Docker images
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    needs: pre-deploy
+    if: needs.pre-deploy.outputs.should_deploy == 'true'
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./mw-panel/backend
+          file: ./mw-panel/backend/Dockerfile.prod
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NODE_ENV=production
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./mw-panel/frontend
+          file: ./mw-panel/frontend/Dockerfile.prod
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VITE_API_URL=https://plataforma.mundoworld.school/api
+
+  # Deploy to production
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production
+    
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          port: ${{ secrets.PRODUCTION_PORT || 22 }}
+          script: |
+            # Navegar al directorio del proyecto
+            cd /opt/mw-panel
+            
+            # Backup de la base de datos antes de desplegar
+            echo "📦 Creating database backup..."
+            ./backup.sh
+            
+            # Pull últimos cambios
+            echo "📥 Pulling latest changes..."
+            git pull origin main
+            
+            # Actualizar imágenes Docker si están publicadas
+            # docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend:latest || true
+            # docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:latest || true
+            
+            # Ejecutar script de despliegue con cache busting
+            echo "🚀 Deploying with cache busting..."
+            ./deploy-with-cache-bust.sh
+            
+            # Verificar estado de los servicios
+            echo "🔍 Checking service status..."
+            ./status-mwpanel.sh
+            
+            # Verificar health endpoint
+            echo "❤️ Checking health endpoint..."
+            curl -f https://plataforma.mundoworld.school/api/health/status || exit 1
+            
+            echo "✅ Deployment completed successfully!"
+
+  # Post-deployment validation
+  post-deploy:
+    name: Post-deployment Validation
+    runs-on: ubuntu-latest
+    needs: deploy
+    
+    steps:
+      - name: Validate deployment
+        run: |
+          echo "🔍 Validating deployment..."
+          
+          # Check main site
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://plataforma.mundoworld.school)
+          if [ $response -eq 200 ]; then
+            echo "✅ Main site is up (HTTP $response)"
+          else
+            echo "❌ Main site is down (HTTP $response)"
+            exit 1
+          fi
+          
+          # Check API
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://plataforma.mundoworld.school/api/health/status)
+          if [ $response -eq 200 ]; then
+            echo "✅ API is up (HTTP $response)"
+          else
+            echo "❌ API is down (HTTP $response)"
+            exit 1
+          fi
+          
+          # Check TypeQuest
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://typequest.mundoworld.school)
+          if [ $response -eq 200 ]; then
+            echo "✅ TypeQuest is up (HTTP $response)"
+          else
+            echo "❌ TypeQuest is down (HTTP $response)"
+            exit 1
+          fi
+
+      - name: Notify deployment status
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: deployment } = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+              environment: 'production',
+              auto_merge: false,
+              required_contexts: [],
+              description: 'Production deployment'
+            });
+            
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployment.id,
+              state: '${{ job.status }}',
+              environment_url: 'https://plataforma.mundoworld.school',
+              description: 'Deployment ${{ job.status }}'
+            });
+
+  # Rollback on failure
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: [deploy, post-deploy]
+    if: failure()
+    
+    steps:
+      - name: Rollback deployment
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          port: ${{ secrets.PRODUCTION_PORT || 22 }}
+          script: |
+            cd /opt/mw-panel
+            
+            echo "⚠️ Deployment failed, initiating rollback..."
+            
+            # Revertir al commit anterior
+            git reset --hard HEAD~1
+            
+            # Reiniciar servicios con la versión anterior
+            ./start-all-optimized.sh --restart
+            
+            # Verificar que el rollback funcionó
+            ./status-mwpanel.sh
+            
+            echo "✅ Rollback completed"

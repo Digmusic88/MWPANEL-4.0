@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Counter Test</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        #root {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        button {
+            background-color: #1890ff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-left: 10px;
+        }
+        button:hover {
+            background-color: #40a9ff;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState } = React;
+
+        function SimpleCounter() {
+            const [count, setCount] = useState(0);
+            
+            return (
+                <div>
+                    <h1>Count: {count}</h1>
+                    <button onClick={() => setCount(count + 1)}>+</button>
+                    <button onClick={() => setCount(count - 1)}>-</button>
+                    <button onClick={() => setCount(0)}>Reset</button>
+                </div>
+            );
+        }
+
+        // Test useState functionality
+        console.log('=== TESTING USESTATE FUNCTIONALITY ===');
+        console.log('React version:', React.version);
+        console.log('useState hook available:', typeof useState === 'function');
+        
+        // Render the component
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<SimpleCounter />);
+        
+        console.log('Component rendered successfully!');
+    </script>
+</body>
+</html>

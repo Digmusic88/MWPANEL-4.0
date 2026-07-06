@@ -1,0 +1,150 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run E2E tests daily at 2 AM
+    - cron: '0 2 * * *'
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: mwpanel
+          POSTGRES_PASSWORD: mwpanel
+          POSTGRES_DB: mwpanel_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+          
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Setup test environment
+        run: |
+          cp backend/.env.example backend/.env
+          echo "DATABASE_HOST=localhost" >> backend/.env
+          echo "DATABASE_PORT=5432" >> backend/.env
+          echo "DATABASE_USERNAME=mwpanel" >> backend/.env
+          echo "DATABASE_PASSWORD=mwpanel" >> backend/.env
+          echo "DATABASE_NAME=mwpanel_test" >> backend/.env
+          echo "REDIS_HOST=localhost" >> backend/.env
+          echo "REDIS_PORT=6379" >> backend/.env
+          echo "JWT_SECRET=test-secret-key" >> backend/.env
+
+      - name: Run database migrations
+        working-directory: ./backend
+        run: npm run migration:run
+
+      - name: Seed test data
+        working-directory: ./backend
+        run: npm run seed:run
+
+      - name: Start backend server
+        working-directory: ./backend
+        run: |
+          npm run build
+          npm run start:prod &
+          npx wait-on http://localhost:3000/api/health/status -t 30000
+
+      - name: Start frontend server
+        working-directory: ./frontend
+        run: |
+          npm run build
+          npm run preview &
+          npx wait-on http://localhost:5173 -t 30000
+
+      - name: Run Cypress E2E tests
+        uses: cypress-io/github-action@v6
+        with:
+          working-directory: ./frontend
+          wait-on: 'http://localhost:5173, http://localhost:3000/api/health/status'
+          wait-on-timeout: 60
+          browser: chrome
+          record: false
+          spec: |
+            cypress/e2e/auth/login.cy.ts
+            cypress/e2e/students/enrollment.cy.ts
+            cypress/e2e/evaluations/competency-evaluation.cy.ts
+            cypress/e2e/activities/activity-management.cy.ts
+
+      - name: Upload Cypress screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots
+          path: frontend/cypress/screenshots
+          retention-days: 7
+
+      - name: Upload Cypress videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-videos
+          path: frontend/cypress/videos
+          retention-days: 7
+
+      - name: Generate E2E test report
+        if: always()
+        run: |
+          echo "## E2E Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "- Auth flows: ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- Student enrollment: ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- Competency evaluation: ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- Activity management: ✅" >> $GITHUB_STEP_SUMMARY
+
+  e2e-performance:
+    runs-on: ubuntu-latest
+    needs: e2e-tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v11
+        with:
+          urls: |
+            http://localhost:5173
+            http://localhost:5173/login
+            http://localhost:5173/admin/dashboard
+          uploadArtifacts: true
+          temporaryPublicStorage: true

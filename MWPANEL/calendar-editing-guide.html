@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guía de Edición de Calendario - MW Panel</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 20px; 
+            background-color: #f5f5f5;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header { 
+            text-align: center; 
+            margin-bottom: 30px;
+            border-bottom: 3px solid #1890ff;
+            padding-bottom: 20px;
+        }
+        .section { 
+            margin: 20px 0; 
+            padding: 20px;
+            border-left: 4px solid #52c41a;
+            background-color: #f6ffed;
+        }
+        .feature { 
+            background-color: #e6f7ff; 
+            padding: 15px; 
+            margin: 15px 0; 
+            border-radius: 8px;
+            border-left: 4px solid #1890ff;
+        }
+        .new-feature { 
+            background-color: #fff2e8; 
+            border-left-color: #fa8c16;
+        }
+        .step {
+            background-color: #f0f0f0;
+            padding: 10px 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            position: relative;
+            padding-left: 40px;
+        }
+        .step-number {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: #1890ff;
+            color: white;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .emoji { font-size: 1.2em; margin-right: 8px; }
+        .url { 
+            background-color: #f1f1f1; 
+            padding: 8px 12px; 
+            border-radius: 4px; 
+            font-family: monospace;
+            display: inline-block;
+            margin: 5px 0;
+        }
+        .highlight { 
+            background-color: #fff1b8; 
+            padding: 2px 4px; 
+            border-radius: 3px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📅 Guía Completa de Edición de Calendario</h1>
+            <h2>MW Panel - Funcionalidad Mejorada para Profesores</h2>
+            <p><strong>Versión:</strong> 2.0 | <strong>Actualizado:</strong> Julio 2025</p>
+        </div>
+
+        <div class="section">
+            <h2><span class="emoji">🎯</span>Nuevas Funcionalidades Implementadas</h2>
+            
+            <div class="feature new-feature">
+                <h3><span class="emoji">✨</span>NUEVO: Edición en "Próximos Eventos"</h3>
+                <p>Ahora puedes editar eventos directamente desde la sección "Próximos Eventos" en el calendario.</p>
+                <ul>
+                    <li><strong>Botón de Vista:</strong> <span class="highlight">👁️</span> para ver detalles completos</li>
+                    <li><strong>Títulos Clickeables:</strong> Click directo en el nombre del evento</li>
+                    <li><strong>Indicadores Visuales:</strong> Títulos en azul para usuarios con permisos</li>
+                </ul>
+            </div>
+
+            <div class="feature new-feature">
+                <h3><span class="emoji">⚡</span>NUEVO: Edición Directa en Lista de Eventos</h3>
+                <p>Botones adicionales para acceso rápido a edición sin pasos intermedios.</p>
+                <ul>
+                    <li><strong>Botón de Edición:</strong> <span class="highlight">✏️</span> para editar inmediatamente</li>
+                    <li><strong>Formulario Pre-rellenado:</strong> Datos del evento cargados automáticamente</li>
+                    <li><strong>Acceso Rápido:</strong> Sin necesidad de abrir drawer primero</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2><span class="emoji">🗺️</span>Ubicaciones de Edición en el Calendario</h2>
+
+            <div class="feature">
+                <h3>1. <span class="emoji">📅</span>Calendario Principal</h3>
+                <p><strong>Ubicación:</strong> Eventos mostrados en las celdas del calendario</p>
+                <p><strong>Acción:</strong> Click en el evento → Abre drawer con detalles → Botón "Editar"</p>
+            </div>
+
+            <div class="feature">
+                <h3>2. <span class="emoji">📋</span>Lista de Eventos del Día</h3>
+                <p><strong>Ubicación:</strong> Panel lateral derecho "Eventos - [Fecha]"</p>
+                <p><strong>Acciones disponibles:</strong></p>
+                <ul>
+                    <li><span class="highlight">👁️ Ver:</span> Abre drawer con detalles completos</li>
+                    <li><span class="highlight">✏️ Editar:</span> Abre modal de edición directamente</li>
+                    <li><span class="highlight">Título clickeable:</span> Click en nombre → Abre drawer</li>
+                </ul>
+            </div>
+
+            <div class="feature new-feature">
+                <h3>3. <span class="emoji">⏰</span>Próximos Eventos (MEJORADO)</h3>
+                <p><strong>Ubicación:</strong> Panel lateral "Próximos Eventos"</p>
+                <p><strong>Nuevas acciones:</strong></p>
+                <ul>
+                    <li><span class="highlight">👁️ Ver:</span> Botón para abrir detalles y editar</li>
+                    <li><span class="highlight">Título clickeable:</span> Click directo en nombre del evento</li>
+                    <li><span class="highlight">Indicador visual:</span> Títulos en azul con cursor pointer</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2><span class="emoji">📝</span>Cómo Editar un Evento - Guía Paso a Paso</h2>
+
+            <h3>Método 1: Desde Próximos Eventos (NUEVO)</h3>
+            <div class="step">
+                <div class="step-number">1</div>
+                Ir a: <div class="url">https://plataforma.mundoworld.school/teacher/calendar</div>
+            </div>
+            <div class="step">
+                <div class="step-number">2</div>
+                Buscar sección <strong>"Próximos Eventos"</strong> en el panel derecho
+            </div>
+            <div class="step">
+                <div class="step-number">3</div>
+                <strong>Opción A:</strong> Click en botón <span class="highlight">👁️</span> → Abre drawer → Click "Editar"<br>
+                <strong>Opción B:</strong> Click directamente en el <span class="highlight">nombre del evento</span> (azul)
+            </div>
+            <div class="step">
+                <div class="step-number">4</div>
+                Modificar los campos necesarios en el formulario
+            </div>
+            <div class="step">
+                <div class="step-number">5</div>
+                Click <strong>"Actualizar Evento"</strong> para guardar cambios
+            </div>
+
+            <h3>Método 2: Edición Directa (NUEVO)</h3>
+            <div class="step">
+                <div class="step-number">1</div>
+                En la lista de eventos del día, click en botón <span class="highlight">✏️ Editar</span>
+            </div>
+            <div class="step">
+                <div class="step-number">2</div>
+                El modal se abre con <strong>todos los datos pre-rellenados</strong>
+            </div>
+            <div class="step">
+                <div class="step-number">3</div>
+                Modificar y guardar directamente
+            </div>
+
+            <h3>Método 3: Desde Calendario (Tradicional)</h3>
+            <div class="step">
+                <div class="step-number">1</div>
+                Click en evento en el calendario → Click <span class="highlight">👁️</span> → Click "Editar"
+            </div>
+        </div>
+
+        <div class="section">
+            <h2><span class="emoji">🔧</span>Campos Editables</h2>
+            <div class="feature">
+                <p><strong>Información Básica:</strong></p>
+                <ul>
+                    <li>📝 Título del evento</li>
+                    <li>📄 Descripción detallada</li>
+                    <li>🏷️ Tipo de evento (reunión, evaluación, actividad, etc.)</li>
+                </ul>
+            </div>
+            <div class="feature">
+                <p><strong>Fecha y Tiempo:</strong></p>
+                <ul>
+                    <li>📅 Fecha de inicio y fin</li>
+                    <li>⏰ Hora de inicio y fin</li>
+                    <li>🌅 Opción "Todo el día"</li>
+                </ul>
+            </div>
+            <div class="feature">
+                <p><strong>Configuración Avanzada:</strong></p>
+                <ul>
+                    <li>👥 Visibilidad (público, solo profesores, específico por clase)</li>
+                    <li>📍 Ubicación del evento</li>
+                    <li>🎨 Color del evento</li>
+                    <li>🔔 Notificaciones automáticas</li>
+                    <li>🏫 Asignación a clases específicas</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2><span class="emoji">👥</span>Permisos de Usuario</h2>
+            <div class="feature">
+                <h3>✅ Pueden Editar Eventos:</h3>
+                <ul>
+                    <li><strong>Administradores:</strong> Todos los eventos del sistema</li>
+                    <li><strong>Profesores:</strong> Eventos creados por ellos y eventos públicos</li>
+                </ul>
+            </div>
+            <div class="feature">
+                <h3>👁️ Solo Pueden Ver:</h3>
+                <ul>
+                    <li><strong>Estudiantes:</strong> Eventos públicos y de sus clases</li>
+                    <li><strong>Familias:</strong> Eventos públicos y de las clases de sus hijos</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2><span class="emoji">🧪</span>Eventos de Prueba Disponibles</h2>
+            <p>Para probar la funcionalidad, hay eventos de ejemplo en el calendario:</p>
+            <div class="feature">
+                <ul>
+                    <li>📅 <strong>17 Jul 2025:</strong> Reunión de Departamento (10:00-12:00)</li>
+                    <li>📝 <strong>19 Jul 2025:</strong> Evaluación de Matemáticas (09:00-10:00)</li>
+                    <li>🎓 <strong>21 Jul 2025:</strong> Actividad Extraescolar (08:00-18:00)</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2><span class="emoji">🔑</span>Credenciales de Prueba</h2>
+            <div class="feature">
+                <p><strong>Para probar como profesor:</strong></p>
+                <ul>
+                    <li><strong>Email:</strong> profesor@mwpanel.com</li>
+                    <li><strong>Password:</strong> Profesor123</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2><span class="emoji">✅</span>Resumen de Mejoras</h2>
+            <div class="feature">
+                <p><strong>Antes:</strong> Solo se podían editar eventos desde el drawer principal</p>
+                <p><strong>Ahora:</strong></p>
+                <ul>
+                    <li>✨ Edición directa desde "Próximos Eventos"</li>
+                    <li>✨ Botones de edición adicionales en listas</li>
+                    <li>✨ Títulos clickeables con indicadores visuales</li>
+                    <li>✨ Acceso más rápido y intuitivo</li>
+                    <li>✨ Múltiples puntos de entrada para edición</li>
+                </ul>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 30px; padding: 20px; background-color: #f6ffed; border-radius: 8px;">
+            <h3><span class="emoji">🎉</span>¡Funcionalidad Completamente Implementada!</h3>
+            <p>La edición de eventos del calendario está ahora disponible en múltiples ubicaciones para mayor comodidad de los usuarios.</p>
+            <p><strong>URL de acceso:</strong> <span class="url">https://plataforma.mundoworld.school/teacher/calendar</span></p>
+        </div>
+    </div>
+</body>
+</html>

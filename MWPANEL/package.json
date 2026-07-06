@@ -1,0 +1,63 @@
+{
+  "name": "mw-panel-root",
+  "version": "2.0.0",
+  "description": "MW Panel 2.0 - Sistema integral de gestión académica",
+  "scripts": {
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run start:dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "test": "./test-all.sh",
+    "test:backend": "cd backend && npm test",
+    "test:frontend": "cd frontend && npm test",
+    "test:e2e": "./test-all.sh --e2e",
+    "test:coverage": "./test-all.sh && echo 'Coverage reports generated in test-coverage/'",
+    "lint": "npm run lint:backend && npm run lint:frontend",
+    "lint:backend": "cd backend && npm run lint",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint:fix": "npm run lint:fix:backend && npm run lint:fix:frontend",
+    "lint:fix:backend": "cd backend && npm run lint:fix",
+    "lint:fix:frontend": "cd frontend && npm run lint:fix",
+    "format": "npm run format:backend && npm run format:frontend",
+    "format:backend": "cd backend && npm run format",
+    "format:frontend": "cd frontend && npm run format",
+    "start:prod": "./start-production-build.sh",
+    "docker:dev": "docker-compose -f docker-compose.dev.yml up",
+    "docker:prod": "docker-compose -f docker-compose.prod.yml up -d",
+    "backup": "./backup.sh",
+    "restore": "./restore.sh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mundoworld/mw-panel-2.0.git"
+  },
+  "keywords": [
+    "education",
+    "school-management",
+    "competency-based",
+    "typequest",
+    "gamification",
+    "nestjs",
+    "react",
+    "typescript"
+  ],
+  "author": "Mundo World School",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "dependencies": {
+    "pg": "^8.16.3"
+  }
+}

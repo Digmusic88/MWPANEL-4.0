@@ -1,0 +1,121 @@
+/* Blog Page Layout Styles */
+
+.blog-page-container {
+  min-height: 100vh;
+  background-color: #f8fafc;
+  padding: 1.5rem;
+}
+
+.blog-page-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.blog-page-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 0.5rem 0;
+}
+
+.blog-page-subtitle {
+  color: #64748b;
+  font-size: 1rem;
+  margin: 0;
+}
+
+/* Mobile timeline container - visible only on mobile */
+.blog-timeline-mobile-container {
+  display: block;
+  max-width: 800px;
+  margin: 0 auto 1rem auto;
+  min-height: 100px; /* Reserve space to prevent content jump when timeline becomes fixed */
+}
+
+/* Desktop timeline container - hidden on mobile */
+.blog-timeline-desktop-container {
+  display: none;
+}
+
+/* Main Grid Layout */
+.blog-page-layout {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 40px;
+  position: relative;
+  align-items: start;
+}
+
+/* Content Area */
+.blog-page-content {
+  min-width: 0; /* Prevent overflow in grid */
+}
+
+/* Override InstagramFeed max-width to fill available space */
+.blog-page-content .instagram-feed {
+  max-width: 100%;
+  padding: 0;
+}
+
+/* Responsive Design - Mobile first */
+@media (max-width: 1024px) {
+  .blog-page-container {
+    padding: 1rem;
+  }
+
+  .blog-page-header {
+    margin-bottom: 1rem;
+  }
+
+  .blog-page-title {
+    font-size: 1.5rem;
+  }
+
+}
+
+@media (max-width: 640px) {
+  .blog-page-container {
+    padding: 0.5rem;
+  }
+
+  .blog-page-header {
+    padding: 0 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .blog-page-title {
+    font-size: 1.25rem;
+  }
+
+  .blog-page-subtitle {
+    font-size: 0.875rem;
+  }
+}
+
+/* Desktop/Tablet Landscape - Show timeline sidebar */
+@media (min-width: 1025px) {
+  /* Hide mobile timeline on desktop */
+  .blog-timeline-mobile-container {
+    display: none;
+  }
+
+  /* Show desktop timeline sidebar */
+  .blog-timeline-desktop-container {
+    display: block;
+    position: relative;
+    width: 280px;
+  }
+
+  .blog-page-layout {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 40px;
+  }
+}
+
+/* Smooth scroll for the whole page */
+html {
+  scroll-behavior: smooth;
+}

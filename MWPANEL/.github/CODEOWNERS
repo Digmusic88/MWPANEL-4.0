@@ -1,0 +1,35 @@
+# CODEOWNERS file for MW Panel
+# These owners will be the default owners for everything in the repo
+
+# Global owners
+* @mundoworldschool
+
+# Backend specific owners
+/mw-panel/backend/ @mundoworldschool
+/mw-panel/backend/src/modules/auth/ @mundoworldschool
+/mw-panel/backend/src/modules/users/ @mundoworldschool
+/mw-panel/backend/src/database/migrations/ @mundoworldschool
+
+# Frontend specific owners
+/mw-panel/frontend/ @mundoworldschool
+/mw-panel/frontend/src/pages/admin/ @mundoworldschool
+/mw-panel/frontend/src/components/ @mundoworldschool
+
+# TypeQuest specific owners
+/typequest/ @mundoworldschool
+
+# CI/CD and DevOps
+/.github/ @mundoworldschool
+/docker-compose*.yml @mundoworldschool
+/Dockerfile* @mundoworldschool
+/nginx/ @mundoworldschool
+/scripts/ @mundoworldschool
+
+# Security sensitive files
+.env.example @mundoworldschool
+*/src/config/ @mundoworldschool
+*/src/modules/auth/ @mundoworldschool
+
+# Documentation
+*.md @mundoworldschool
+/docs/ @mundoworldschool

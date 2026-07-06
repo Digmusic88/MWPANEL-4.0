@@ -1,0 +1,1616 @@
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, DataSource, Between, In } from 'typeorm';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { ModerationReport, ModerationStatus, ModerationAction, ModerationReason } from '../entities/moderation-report.entity';
+import { ModerationConfig } from '../entities/moderation-config.entity';
+import { StudentNote } from '../entities/student-note.entity';
+import { SharedNoteComment } from '../entities/shared-note-comment.entity';
+import { User, UserRole } from '../../users/entities/user.entity';
+import { Student } from '../../students/entities/student.entity';
+import { Family } from '../../users/entities/family.entity';
+import { Notification } from '../../communications/entities/notification.entity';
+import {
+  CreateModerationReportDto,
+  ModerationActionDto,
+  ModerationFiltersDto,
+  AutoModerationConfigDto,
+  ModerationStatsDto,
+} from '../dto/moderation.dto';
+import { AzureContentSafetyService, ContentModerationResult } from './azure-content-safety.service';
+
+export interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface ModerationStats {
+  totalReports: number;
+  pendingReports: number;
+  resolvedReports: number;
+  averageResolutionTime: number;
+  reportsByReason: { reason: string; count: number }[];
+  reportsByStatus: { status: string; count: number }[];
+  topReportedAuthors: { authorId: string; authorName: string; reportCount: number }[];
+  moderatorActivity: { moderatorId: string; moderatorName: string; actionsCount: number }[];
+}
+
+@Injectable()
+export class ModerationService {
+  private readonly logger = new Logger(ModerationService.name);
+
+  constructor(
+    @InjectRepository(ModerationReport)
+    private moderationReportRepository: Repository<ModerationReport>,
+    @InjectRepository(ModerationConfig)
+    private moderationConfigRepository: Repository<ModerationConfig>,
+    @InjectRepository(StudentNote)
+    private noteRepository: Repository<StudentNote>,
+    @InjectRepository(SharedNoteComment)
+    private commentRepository: Repository<SharedNoteComment>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+    private dataSource: DataSource,
+    private azureContentSafetyService: AzureContentSafetyService,
+  ) {}
+
+  /**
+   * Crear un reporte de moderación
+   */
+  async createReport(
+    dto: CreateModerationReportDto,
+    reportedBy?: User
+  ): Promise<ModerationReport> {
+    console.log('🚨 MODERATION: Creating report for note:', dto.noteId);
+    console.log('🚨 MODERATION: Comment ID:', dto.commentId || 'none');
+    console.log('🚨 MODERATION: DTO:', JSON.stringify(dto));
+    console.log('🚨 MODERATION: Method START - Debugging version running!');
+    console.log('🚨 MODERATION: reportedBy:', reportedBy ? reportedBy.email : 'none');
+    
+    // Verificar que la nota existe
+    console.log('🔍 MODERATION: Fetching note with relations...');
+    const note = await this.noteRepository.findOne({
+      where: { id: dto.noteId },
+      relations: ['author', 'author.profile']
+    });
+
+    console.log('🔍 MODERATION: Note fetch result:', note ? `found: ${note.title}` : 'not found');
+
+    if (!note) {
+      console.log('❌ MODERATION: Note not found, throwing NotFoundException');
+      throw new NotFoundException('Nota no encontrada');
+    }
+
+    // Si se está reportando un comentario específico, verificar que existe
+    let comment: SharedNoteComment | null = null;
+    let reportedUserId: string = note.authorId; // Por defecto, reportar al autor de la nota
+    
+    if (dto.commentId) {
+      console.log('🔍 MODERATION: Fetching comment with relations...');
+      comment = await this.commentRepository.findOne({
+        where: { id: dto.commentId },
+        relations: ['user', 'user.profile', 'sharedNote']
+      });
+
+      if (!comment) {
+        console.log('❌ MODERATION: Comment not found, throwing NotFoundException');
+        throw new NotFoundException('Comentario no encontrado');
+      }
+
+      // Para comentarios, reportar al autor del comentario
+      reportedUserId = comment.userId;
+      console.log('✅ MODERATION: Comment found, reporting comment author:', comment.user?.email);
+    } else {
+      console.log('✅ MODERATION: No comment specified, reporting note author:', note.author?.email);
+    }
+
+    console.log('✅ MODERATION: Target user ID for report:', reportedUserId);
+
+    // La restricción única de base de datos previene reportes duplicados
+
+    const report = this.moderationReportRepository.create({
+      noteId: dto.noteId,
+      commentId: dto.commentId || null,
+      reportedById: reportedBy?.id || null,
+      reason: dto.reason,
+      description: dto.description,
+      status: ModerationStatus.PENDING,
+      autoGenerated: !reportedBy, // Si no hay usuario, es auto-generado
+      priority: this.calculatePriority(dto.reason, note),
+      metadata: {
+        noteTitle: note.title,
+        noteType: note.type,
+        authorEmail: note.author?.email,
+        // Información del comentario si aplica
+        commentContent: comment?.content,
+        commentAuthorEmail: comment?.user?.email,
+        reportType: dto.commentId ? 'comment' : 'note',
+        targetUserId: reportedUserId
+      }
+    });
+
+    // Primero verificar si ya existe un reporte para esta nota
+    console.log(`🔍 MODERATION: Checking for existing report for note ${dto.noteId}`);
+    console.log(`🔍 MODERATION: Note UUID type: ${typeof dto.noteId}`);
+    
+    // Verificar reportes duplicados considerando comentarios
+    const whereCondition = dto.commentId 
+      ? { noteId: dto.noteId, commentId: dto.commentId }
+      : { noteId: dto.noteId, commentId: null };
+    
+    const existingReport = await this.moderationReportRepository.findOne({
+      where: whereCondition,
+      relations: ['note', 'note.author', 'comment', 'comment.user']
+    });
+
+    console.log(`🔍 MODERATION: Existing report check result: ${existingReport ? `found ${existingReport.id} with status ${existingReport.status}` : 'not found'}`);
+    console.log(`🔍 MODERATION: Raw query result:`, existingReport);
+
+    if (existingReport) {
+      console.log(`⏭️ MODERATION: Report already exists for note ${dto.noteId}, returning existing report ${existingReport.id}`);
+      return existingReport;
+    }
+
+    console.log(`✅ MODERATION: No existing report found, proceeding to create new report for note ${dto.noteId}`);
+
+    let savedReport;
+    try {
+      savedReport = await this.moderationReportRepository.save(report);
+      console.log('✅ MODERATION: Report created successfully:', savedReport.id);
+    } catch (error) {
+      console.log(`🔍 MODERATION ERROR CAUGHT! Type: ${error.constructor.name}`);
+      console.log(`🔍 MODERATION ERROR: Code: ${error.code}, Constraint: ${error.constraint}`);
+      console.log(`🔍 MODERATION ERROR: Message: ${error.message}`);
+      
+      // Si es error de duplicado, probablemente fue creado entre nuestra verificación y el save
+      if (error.code === '23505' || error.message?.includes('duplicate key value violates unique constraint')) {
+        console.log(`⏭️ MODERATION: Duplicate constraint detected, fetching the existing report`);
+        const existingReport = await this.moderationReportRepository.findOne({
+          where: { noteId: dto.noteId },
+          relations: ['note', 'note.author']
+        });
+        if (existingReport) {
+          console.log(`✅ MODERATION: Found existing report ${existingReport.id}, returning it`);
+          return existingReport;
+        }
+      }
+      console.log(`🚨 MODERATION: Re-throwing error: ${error.message}`);
+      throw error; // Re-lanzar otros errores
+    }
+
+    // Notificar a moderadores si está habilitado
+    const config = await this.getConfig();
+    if (config?.notifyModeratorsOnReport) {
+      await this.notifyModeratorsOfNewReport(savedReport);
+    }
+
+    // Aplicar auto-moderación si está habilitada
+    await this.applyAutoModeration(savedReport);
+
+    return savedReport;
+  }
+
+  /**
+   * Obtener reportes con filtros y paginación
+   */
+  async getReports(filters: ModerationFiltersDto): Promise<PaginatedResult<ModerationReport>> {
+    const { page = 1, limit = 20 } = filters;
+    
+    const queryBuilder = this.moderationReportRepository
+      .createQueryBuilder('report')
+      .leftJoinAndSelect('report.note', 'note')
+      .leftJoinAndSelect('report.reportedBy', 'reportedBy')
+      .leftJoinAndSelect('reportedBy.profile', 'reportedByProfile')
+      .leftJoinAndSelect('report.moderator', 'moderator')
+      .leftJoinAndSelect('moderator.profile', 'moderatorProfile')
+      .leftJoinAndSelect('note.author', 'author')
+      .leftJoinAndSelect('author.profile', 'authorProfile');
+
+    // Aplicar filtros
+    if (filters.status) {
+      queryBuilder.andWhere('report.status = :status', { status: filters.status });
+    }
+
+    if (filters.reason) {
+      queryBuilder.andWhere('report.reason = :reason', { reason: filters.reason });
+    }
+
+    if (filters.moderatorId) {
+      queryBuilder.andWhere('report.moderatorId = :moderatorId', { moderatorId: filters.moderatorId });
+    }
+
+    if (filters.dateFrom) {
+      queryBuilder.andWhere('report.createdAt >= :dateFrom', { 
+        dateFrom: new Date(filters.dateFrom) 
+      });
+    }
+
+    if (filters.dateTo) {
+      queryBuilder.andWhere('report.createdAt <= :dateTo', { 
+        dateTo: new Date(filters.dateTo) 
+      });
+    }
+
+    // Ordenar por prioridad y fecha
+    queryBuilder.orderBy('report.priority', 'ASC')
+                .addOrderBy('report.createdAt', 'DESC');
+
+    // Paginación
+    const offset = (page - 1) * limit;
+    const [reports, total] = await queryBuilder
+      .skip(offset)
+      .take(limit)
+      .getManyAndCount();
+
+    return {
+      data: reports,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  /**
+   * Realizar acción de moderación
+   */
+  async takeAction(
+    reportId: string,
+    dto: ModerationActionDto,
+    moderator: User
+  ): Promise<ModerationReport> {
+    const report = await this.moderationReportRepository.findOne({
+      where: { id: reportId },
+      relations: ['note', 'note.author', 'note.author.profile']
+    });
+
+    if (!report) {
+      throw new NotFoundException('Reporte no encontrado');
+    }
+
+    // Permitir reprocesamiento de reportes (eliminada restricción de estado)
+    // Los reportes pueden ser editados múltiples veces según solicitud del usuario
+
+    // Actualizar el reporte
+    report.moderatorId = moderator.id;
+    report.action = dto.action;
+    report.moderatorComments = dto.moderatorComments;
+    report.resolvedAt = new Date();
+
+    // Determinar el nuevo estado
+    switch (dto.action) {
+      case ModerationAction.APPROVE:
+        report.status = ModerationStatus.APPROVED;
+        break;
+      case ModerationAction.REJECT:
+      case ModerationAction.DELETE:
+        report.status = ModerationStatus.REJECTED;
+        break;
+      case ModerationAction.FLAG:
+        report.status = ModerationStatus.FLAGGED;
+        break;
+    }
+
+    // Aplicar la acción sobre la nota
+    await this.applyActionToNote(report.note, dto.action, moderator);
+
+    const updatedReport = await this.moderationReportRepository.save(report);
+
+    // Verificar configuración global para notificaciones de usuarios
+    const config = await this.getConfig();
+    const shouldNotifyUsers = config?.notifyUsersOnAction ?? false;
+
+    console.log(`🔍 MODERATION NOTIFICATION CONFIG:`, {
+      shouldNotifyUsers,
+      configNotifyUsersOnAction: config?.notifyUsersOnAction,
+      hasAuthor: !!report.note.author,
+      authorEmail: report.note.author?.email,
+      dtoNotifyAuthor: dto.notifyAuthor,
+      action: dto.action
+    });
+
+    // Notificar al autor basándose en la configuración
+    if (report.note.author && shouldNotifyUsers) {
+      console.log(`📧 PATH 1: Notifying due to config enabled`);
+      // Si la configuración está habilitada, notificar para todas las acciones importantes
+      if (dto.action === ModerationAction.WARN_USER || 
+          dto.action === ModerationAction.DELETE || 
+          dto.action === ModerationAction.FLAG ||
+          dto.notifyAuthor) {
+        await this.notifyAuthorOfAction(report.note.author, updatedReport, dto.action);
+      }
+    } else if (report.note.author && dto.notifyAuthor) {
+      console.log(`📧 PATH 2: Notifying due to explicit notifyAuthor=true`);
+      // Si la configuración está deshabilitada, solo notificar si se solicita explícitamente
+      await this.notifyAuthorOfAction(report.note.author, updatedReport, dto.action);
+    } else {
+      console.log(`❌ NO NOTIFICATION: shouldNotifyUsers=${shouldNotifyUsers}, hasAuthor=${!!report.note.author}, notifyAuthor=${dto.notifyAuthor}`);
+    }
+
+    console.log(`✅ MODERATION: Action ${dto.action} applied to report ${reportId} by ${moderator.email}`);
+
+    return updatedReport;
+  }
+
+  /**
+   * Obtener estadísticas de moderación
+   */
+  async getStats(dto: ModerationStatsDto): Promise<ModerationStats> {
+    const { period = 'month' } = dto;
+    const now = new Date();
+    let startDate: Date;
+
+    switch (period) {
+      case 'today':
+        startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        break;
+      case 'week':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case 'year':
+        startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+        break;
+      default: // month
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
+
+    // Estadísticas básicas
+    const [totalReports, pendingReports, resolvedReports] = await Promise.all([
+      this.moderationReportRepository.count({
+        where: { createdAt: Between(startDate, now) }
+      }),
+      this.moderationReportRepository.count({
+        where: { 
+          status: ModerationStatus.PENDING,
+          createdAt: Between(startDate, now)
+        }
+      }),
+      this.moderationReportRepository.count({
+        where: { 
+          status: In([ModerationStatus.APPROVED, ModerationStatus.REJECTED]),
+          createdAt: Between(startDate, now)
+        }
+      })
+    ]);
+
+    // Reportes por razón
+    const reportsByReason = await this.moderationReportRepository
+      .createQueryBuilder('report')
+      .select('report.reason', 'reason')
+      .addSelect('COUNT(*)', 'count')
+      .where('report.createdAt BETWEEN :startDate AND :now', { startDate, now })
+      .groupBy('report.reason')
+      .orderBy('COUNT(*)', 'DESC')
+      .getRawMany();
+
+    // Reportes por estado
+    const reportsByStatus = await this.moderationReportRepository
+      .createQueryBuilder('report')
+      .select('report.status', 'status')
+      .addSelect('COUNT(*)', 'count')
+      .where('report.createdAt BETWEEN :startDate AND :now', { startDate, now })
+      .groupBy('report.status')
+      .getRawMany();
+
+    // Autores más reportados
+    const topReportedAuthors = await this.moderationReportRepository
+      .createQueryBuilder('report')
+      .select('note.authorId', 'authorId')
+      .addSelect('COUNT(*)', 'reportCount')
+      .leftJoin('report.note', 'note')
+      .leftJoin('note.author', 'author')
+      .leftJoin('author.profile', 'profile')
+      .addSelect('COALESCE(profile.firstName || \' \' || profile.lastName, author.email)', 'authorName')
+      .where('report.createdAt BETWEEN :startDate AND :now', { startDate, now })
+      .groupBy('note.authorId, profile.firstName, profile.lastName, author.email')
+      .orderBy('COUNT(*)', 'DESC')
+      .limit(10)
+      .getRawMany();
+
+    // Actividad de moderadores
+    const moderatorActivity = await this.moderationReportRepository
+      .createQueryBuilder('report')
+      .select('report.moderatorId', 'moderatorId')
+      .addSelect('COUNT(*)', 'actionsCount')
+      .leftJoin('report.moderator', 'moderator')
+      .leftJoin('moderator.profile', 'moderatorProfile')
+      .addSelect('COALESCE(moderatorProfile.firstName || \' \' || moderatorProfile.lastName, moderator.email)', 'moderatorName')
+      .where('report.resolvedAt BETWEEN :startDate AND :now', { startDate, now })
+      .andWhere('report.moderatorId IS NOT NULL')
+      .groupBy('report.moderatorId, moderatorProfile.firstName, moderatorProfile.lastName, moderator.email')
+      .orderBy('COUNT(*)', 'DESC')
+      .limit(10)
+      .getRawMany();
+
+    // Tiempo promedio de resolución
+    const avgResolutionResult = await this.moderationReportRepository
+      .createQueryBuilder('report')
+      .select('AVG(EXTRACT(EPOCH FROM (report.resolvedAt - report.createdAt)))', 'avgSeconds')
+      .where('report.resolvedAt IS NOT NULL')
+      .andWhere('report.createdAt BETWEEN :startDate AND :now', { startDate, now })
+      .getRawOne();
+
+    const averageResolutionTime = avgResolutionResult?.avgSeconds 
+      ? Math.round(parseFloat(avgResolutionResult.avgSeconds) / 3600) // Convertir a horas
+      : 0;
+
+    return {
+      totalReports,
+      pendingReports,
+      resolvedReports,
+      averageResolutionTime,
+      reportsByReason: reportsByReason.map(r => ({ reason: r.reason, count: parseInt(r.count) })),
+      reportsByStatus: reportsByStatus.map(r => ({ status: r.status, count: parseInt(r.count) })),
+      topReportedAuthors: topReportedAuthors.map(r => ({
+        authorId: r.authorId,
+        authorName: r.authorName || 'Usuario desconocido',
+        reportCount: parseInt(r.reportCount)
+      })),
+      moderatorActivity: moderatorActivity.map(r => ({
+        moderatorId: r.moderatorId,
+        moderatorName: r.moderatorName || 'Moderador desconocido',
+        actionsCount: parseInt(r.actionsCount)
+      }))
+    };
+  }
+
+  /**
+   * Configurar auto-moderación
+   */
+  async updateAutoModerationConfig(dto: AutoModerationConfigDto): Promise<ModerationConfig> {
+    this.logger.debug(`🔧 CONFIG UPDATE: Received DTO: ${JSON.stringify(dto)}`);
+    
+    let config = await this.moderationConfigRepository.findOne({ where: {} });
+    
+    if (!config) {
+      config = this.moderationConfigRepository.create();
+    }
+
+    // Configuraciones básicas
+    if (dto.enabled !== undefined) config.autoModerationEnabled = dto.enabled;
+    if (dto.bannedWords) config.bannedWords = dto.bannedWords;
+    
+    this.logger.debug(`🔧 SUSPICIOUS PHRASES CHECK: dto.suspiciousPhrases exists: ${!!dto.suspiciousPhrases}`);
+    this.logger.debug(`🔧 SUSPICIOUS PHRASES CHECK: dto.suspiciousPhrases value: ${JSON.stringify(dto.suspiciousPhrases)}`);
+    
+    if (dto.suspiciousPhrases !== undefined) {
+      this.logger.debug(`🔧 SUSPICIOUS PHRASES: Updating with ${dto.suspiciousPhrases.length} phrases`);
+      this.logger.debug(`🔧 SUSPICIOUS PHRASES: Content: ${JSON.stringify(dto.suspiciousPhrases)}`);
+      config.suspiciousPhrases = dto.suspiciousPhrases;
+    }
+    if (dto.sensitivity !== undefined) config.sensitivity = dto.sensitivity;
+    if (dto.autoApproveTrustedUsers !== undefined) config.autoApproveTrustedUsers = dto.autoApproveTrustedUsers;
+    if (dto.trustedUserIds) config.trustedUserIds = dto.trustedUserIds;
+
+    // Configuraciones de notificaciones - CORREGIR LÓGICA BOOLEAN
+    if (dto.notifyModeratorsOnReport !== undefined) config.notifyModeratorsOnReport = dto.notifyModeratorsOnReport;
+    if (dto.notifyUsersOnAction !== undefined) config.notifyUsersOnAction = dto.notifyUsersOnAction;
+    if (dto.maxModerationHours !== undefined) config.maxModerationHours = dto.maxModerationHours;
+
+    this.logger.debug(`🔧 CONFIG BEFORE SAVE: suspiciousPhrases = ${JSON.stringify(config.suspiciousPhrases)}`);
+    const savedConfig = await this.moderationConfigRepository.save(config);
+    this.logger.debug(`🔧 CONFIG AFTER SAVE: suspiciousPhrases = ${JSON.stringify(savedConfig.suspiciousPhrases)}`);
+    
+    return savedConfig;
+  }
+
+  /**
+   * Obtener configuración actual
+   */
+  async getConfig(): Promise<ModerationConfig | null> {
+    return await this.moderationConfigRepository.findOne({ where: {} });
+  }
+
+  /**
+   * Aplicar auto-moderación a una nota usando Azure Content Moderator
+   */
+  async applyAutoModeration(report: ModerationReport): Promise<void> {
+    const config = await this.getConfig();
+    if (!config?.autoModerationEnabled) {
+      return;
+    }
+
+    console.log('🤖 MODERATION: Applying auto-moderation to report:', report.id);
+
+    const note = await this.noteRepository.findOne({
+      where: { id: report.noteId },
+      relations: ['author']
+    });
+
+    if (!note) return;
+
+    // Auto-aprobar usuarios confiables
+    if (config.autoApproveTrustedUsers && 
+        config.trustedUserIds.includes(note.authorId)) {
+      report.status = ModerationStatus.APPROVED;
+      report.moderatorComments = 'Auto-aprobado: Usuario confiable';
+      await this.moderationReportRepository.save(report);
+      console.log('✅ MODERATION: Auto-approved trusted user content');
+      return;
+    }
+
+    // Aplicar moderación con Azure Content Safety
+    await this.applyAzureContentModeration(report, note, config);
+
+    // Fallback: Verificar palabras prohibidas localmente
+    await this.applyLocalContentModeration(report, note, config);
+  }
+
+  /**
+   * Aplicar moderación usando Azure Content Safety
+   */
+  private async applyAzureContentModeration(
+    report: ModerationReport, 
+    note: StudentNote, 
+    config: ModerationConfig
+  ): Promise<void> {
+    try {
+      console.log('🔵 AZURE MODERATION: Starting Azure Content Safety analysis...');
+      
+      const content = `${note.title} ${note.content || ''}`;
+      const moderationResult: ContentModerationResult = await this.azureContentSafetyService.moderateText(content, {
+        language: 'spa',
+        categories: ['Hate', 'Sexual', 'Violence', 'SelfHarm']
+      });
+
+      console.log('🔵 AZURE MODERATION: Result:', {
+        isContentFlagged: moderationResult.isContentFlagged,
+        confidence: moderationResult.confidence,
+        categories: moderationResult.categories
+      });
+
+      // Aplicar sensibilidad configurada (1-10)
+      const sensitivityThreshold = config.sensitivity / 10; // Convertir a 0.1-1.0
+      const shouldFlag = moderationResult.isContentFlagged || 
+                        moderationResult.confidence > sensitivityThreshold;
+
+      if (shouldFlag) {
+        report.status = ModerationStatus.FLAGGED;
+        report.priority = Math.min(Math.ceil(moderationResult.confidence * 5), 5); // 1-5 priority
+        report.moderatorComments = `Azure Content Safety: ${moderationResult.reason} (Confianza: ${(moderationResult.confidence * 100).toFixed(1)}%)`;
+        
+        // Guardar metadata de Azure
+        report.metadata = {
+          ...report.metadata,
+          azureModeration: {
+            confidence: moderationResult.confidence,
+            categories: moderationResult.categories,
+            reviewRecommended: moderationResult.reviewRecommended,
+            timestamp: new Date().toISOString()
+          }
+        };
+
+        await this.moderationReportRepository.save(report);
+        console.log('⚠️ AZURE MODERATION: Content flagged by Azure Content Safety');
+        return;
+      }
+
+      // Si Azure no detecta problemas pero recomienda revisión
+      if (moderationResult.reviewRecommended && moderationResult.confidence > 0.3) {
+        report.priority = Math.max(3, report.priority); // Prioridad media
+        report.moderatorComments = (report.moderatorComments || '') + 
+          ` Azure recomienda revisión manual (Confianza: ${(moderationResult.confidence * 100).toFixed(1)}%)`;
+        
+        report.metadata = {
+          ...report.metadata,
+          azureModeration: {
+            confidence: moderationResult.confidence,
+            categories: moderationResult.categories,
+            reviewRecommended: true,
+            timestamp: new Date().toISOString()
+          }
+        };
+
+        await this.moderationReportRepository.save(report);
+        console.log('🔍 AZURE MODERATION: Manual review recommended');
+      }
+
+    } catch (error) {
+      console.error('❌ AZURE MODERATION: Error during Azure moderation:', error);
+      // Continuar con moderación local en caso de error
+    }
+  }
+
+  /**
+   * Aplicar moderación local como fallback
+   */
+  private async applyLocalContentModeration(
+    report: ModerationReport, 
+    note: StudentNote, 
+    config: ModerationConfig
+  ): Promise<void> {
+    const content = `${note.title} ${note.content || ''}`.toLowerCase();
+    
+    // Verificar palabras prohibidas
+    const foundBannedWords = config.bannedWords.filter(word => 
+      content.includes(word.toLowerCase())
+    );
+
+    // Verificar frases sospechosas
+    const foundSuspiciousPhrases = config.suspiciousPhrases.filter(phrase => 
+      content.includes(phrase.toLowerCase())
+    );
+
+    if (foundBannedWords.length > 0) {
+      report.status = ModerationStatus.FLAGGED;
+      report.priority = 1; // Alta prioridad para palabras prohibidas
+      const azureComment = report.moderatorComments || '';
+      report.moderatorComments = `${azureComment} | Local: Palabras prohibidas detectadas: ${foundBannedWords.join(', ')}`;
+      
+      await this.moderationReportRepository.save(report);
+      console.log('⚠️ LOCAL MODERATION: Auto-flagged for banned words:', foundBannedWords);
+    } else if (foundSuspiciousPhrases.length > 0) {
+      // Solo aumentar prioridad para frases sospechosas, no auto-flaggear
+      report.priority = Math.max(2, report.priority); // Prioridad media-alta
+      const azureComment = report.moderatorComments || '';
+      report.moderatorComments = `${azureComment} | Local: Frases sospechosas detectadas: ${foundSuspiciousPhrases.join(', ')}`;
+      
+      await this.moderationReportRepository.save(report);
+      console.log('🔍 LOCAL MODERATION: Suspicious phrases detected:', foundSuspiciousPhrases);
+    }
+  }
+
+  /**
+   * Escanear contenido existente en busca de problemas
+   */
+  async scanExistingContent(): Promise<{ scanned: number; flagged: number }> {
+    console.log('🔍 MODERATION: Starting content scan...');
+    console.error('🚨 DEBUGGING: scanExistingContent method EJECUTÁNDOSE - VERSIÓN NUEVA');
+    
+    let config;
+    try {
+      console.log('🔧 CONFIG: Getting moderation config...');
+      config = await this.getConfig();
+      console.log('🔧 CONFIG: Auto-moderation enabled:', config?.autoModerationEnabled);
+      console.log('🔧 CONFIG: Banned words count:', config?.bannedWords?.length || 0);
+    } catch (error) {
+      console.error('❌ CONFIG ERROR:', error);
+      throw error;
+    }
+    
+    if (!config?.autoModerationEnabled) {
+      console.log('❌ MODERATION: Auto-moderation disabled, returning');
+      return { scanned: 0, flagged: 0 };
+    }
+
+    console.log('🔍 MODERATION: Fetching notes with shared notes and comments...');
+    const notes = await this.noteRepository.find({
+      relations: ['author', 'sharedNotes', 'sharedNotes.comments'],
+      order: { createdAt: 'DESC' },
+      take: 1000 // Limitar para evitar sobrecarga
+    });
+
+    console.log(`🔍 MODERATION: Found ${notes.length} notes to scan`);
+    let flagged = 0;
+
+    for (const note of notes) {
+      console.log(`🔍 CHECKING: Note ${note.id} - title: "${note.title}"`);
+      console.log(`🔍 CHECKING: Note ID type: ${typeof note.id}, length: ${note.id.length}`);
+      
+      // Verificar si ya tiene reportes de cualquier tipo (pending, flagged, approved, rejected)
+      console.log(`🔍 QUERY: Looking for existing report with noteId: ${note.id}`);
+      const existingReport = await this.moderationReportRepository.findOne({
+        where: { noteId: note.id }
+      });
+
+      console.log(`🔍 EXISTING REPORT: Note ${note.id} - found: ${!!existingReport}, status: ${existingReport?.status || 'N/A'}`);
+      console.log(`🔍 EXISTING REPORT: Raw result:`, existingReport ? `ID: ${existingReport.id}, noteId: ${existingReport.noteId}` : 'null');
+
+      if (existingReport) {
+        console.log(`⏭️ SKIP: Note ${note.id} already has report with status: ${existingReport.status}`);
+        continue;
+      }
+
+      console.log(`✅ PROCEED: No existing report found for note ${note.id}, checking content...`);
+
+      // Incluir contenido de comentarios de notas compartidas en el escaneo
+      const commentsContent = note.sharedNotes?.flatMap(sharedNote => 
+        sharedNote.comments?.map(comment => comment.content || '') || []
+      ).join(' ') || '';
+      const fullContent = `${note.title} ${note.content || ''} ${commentsContent}`.toLowerCase();
+      
+      const foundBannedWords = config.bannedWords.filter(word => 
+        fullContent.includes(word.toLowerCase())
+      );
+
+      const foundSuspiciousPhrases = config.suspiciousPhrases?.filter(phrase => 
+        fullContent.includes(phrase.toLowerCase())
+      ) || [];
+
+      if (foundBannedWords.length > 0 || foundSuspiciousPhrases.length > 0) {
+        const problems = [...foundBannedWords, ...foundSuspiciousPhrases];
+        console.log(`🚨 PROBLEMS FOUND for note ${note.id}: ${problems.join(', ')}`);
+        
+        // Crear reporte directamente sin usar createReport para evitar verificaciones complejas
+        try {
+          const report = this.moderationReportRepository.create({
+            noteId: note.id,
+            reportedById: null, // Auto-generado
+            reason: ModerationReason.INAPPROPRIATE_CONTENT,
+            description: `Auto-detectado durante escaneo: ${problems.join(', ')}`,
+            status: ModerationStatus.PENDING,
+            autoGenerated: true,
+            priority: 1, // Prioridad estándar para auto-detectado
+            metadata: {
+              noteTitle: note.title,
+              noteType: note.type,
+              scanDetectedTerms: problems
+            }
+          });
+
+          const savedReport = await this.moderationReportRepository.save(report);
+          flagged++;
+          console.log(`🚨 CREATED: Report ${savedReport.id} for note ${note.id} with problems: ${problems.join(', ')}`);
+          
+        } catch (error) {
+          console.log(`⚠️ ERROR creating report for note ${note.id}: ${error.message}`);
+          
+          // Si es error de duplicado, es porque ya existe el reporte
+          if (error.code === '23505' || error.message?.includes('duplicate key value violates unique constraint')) {
+            console.log(`🔄 SKIP: Report already exists for note ${note.id} (detected during save)`);
+            // No contar como flagged porque ya existía
+          } else {
+            console.log(`❌ REAL ERROR for note ${note.id}:`, error);
+            throw error; // Re-throw errores reales para debugging
+          }
+        }
+      }
+    }
+
+    console.log(`✅ MODERATION: Scan completed. Scanned: ${notes.length}, Flagged: ${flagged}`);
+    return { scanned: notes.length, flagged };
+  }
+
+  // Métodos privados
+
+  private calculatePriority(reason: ModerationReason, note: StudentNote): number {
+    // Prioridad basada en la razón del reporte
+    const priorityMap = {
+      [ModerationReason.VIOLENCE]: 1,
+      [ModerationReason.ADULT_CONTENT]: 1,
+      [ModerationReason.HARASSMENT]: 2,
+      [ModerationReason.INAPPROPRIATE_CONTENT]: 3,
+      [ModerationReason.SPAM]: 4,
+      [ModerationReason.COPYRIGHT]: 4,
+      [ModerationReason.FAKE_NEWS]: 5,
+      [ModerationReason.OTHER]: 5
+    };
+
+    return priorityMap[reason] || 5;
+  }
+
+
+  /**
+   * Obtener estado de Azure Content Safety
+   */
+  async getAzureStatus(): Promise<{
+    isConfigured: boolean;
+    isWorking: boolean;
+    lastTest?: Date;
+    error?: string;
+  }> {
+    try {
+      const isConfigured = this.azureContentSafetyService.isServiceConfigured();
+      
+      if (!isConfigured) {
+        return {
+          isConfigured: false,
+          isWorking: false,
+          error: 'Azure Content Safety no está configurado. Añade AZURE_CONTENT_SAFETY_KEY y AZURE_CONTENT_SAFETY_ENDPOINT a las variables de entorno.'
+        };
+      }
+
+      const isWorking = await this.azureContentSafetyService.testConnection();
+      
+      return {
+        isConfigured,
+        isWorking,
+        lastTest: new Date(),
+        error: isWorking ? undefined : 'Error de conexión con Azure Content Safety'
+      };
+    } catch (error) {
+      return {
+        isConfigured: false,
+        isWorking: false,
+        error: `Error al verificar Azure: ${error.message}`
+      };
+    }
+  }
+
+  /**
+   * Probar moderación con Azure para una muestra de texto
+   */
+  async testAzureModeration(text: string = 'Texto de prueba para Azure Content Safety'): Promise<any> {
+    try {
+      const result = await this.azureContentSafetyService.moderateText(text, {
+        language: 'spa',
+        categories: ['Hate', 'Sexual', 'Violence', 'SelfHarm']
+      });
+
+      return {
+        success: true,
+        testText: text,
+        result: {
+          isContentFlagged: result.isContentFlagged,
+          confidence: result.confidence,
+          reason: result.reason,
+          categories: result.categories,
+          reviewRecommended: result.reviewRecommended
+        },
+        timestamp: new Date()
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        timestamp: new Date()
+      };
+    }
+  }
+
+  /**
+   * Notificar al autor sobre la acción de moderación
+   */
+  private async notifyAuthorOfAction(
+    author: User,
+    report: ModerationReport,
+    action: ModerationAction
+  ): Promise<void> {
+    try {
+      // Crear notificación directamente en la base de datos
+      const notificationRepository = this.dataSource.getRepository('Notification');
+
+      let title: string;
+      let content: string;
+
+      switch (action) {
+        case ModerationAction.WARN_USER:
+          title = '⚠️ Advertencia de Moderación';
+          content = `Has recibido una advertencia de moderación por tu nota "${report.note?.title}". ${report.moderatorComments || 'Por favor, revisa las normas de la comunidad y mantén un comportamiento apropiado en tus futuras publicaciones y comentarios.'}`;
+          break;
+        
+        case ModerationAction.DELETE:
+          title = '🗑️ Contenido Eliminado';
+          content = `Tu nota "${report.note?.title}" ha sido eliminada por violar las normas de la comunidad. ${report.moderatorComments || ''}`;
+          break;
+        
+        case ModerationAction.FLAG:
+          title = '🚩 Contenido Marcado';
+          content = `Tu nota "${report.note?.title}" ha sido marcada para revisión. ${report.moderatorComments || 'Se requiere revisión adicional.'}`;
+          break;
+        
+        case ModerationAction.APPROVE:
+          title = '✅ Contenido Aprobado';
+          content = `Tu nota "${report.note?.title}" ha sido revisada y aprobada. ${report.moderatorComments || ''}`;
+          break;
+        
+        default:
+          title = '📋 Acción de Moderación';
+          content = `Se ha tomado una acción de moderación sobre tu nota "${report.note?.title}". ${report.moderatorComments || ''}`;
+      }
+
+      // Crear notificación directamente
+      const notification = notificationRepository.create({
+        userId: author.id,
+        title,
+        content,
+        type: 'moderation' as any,
+        status: 'unread' as any,
+        relatedResourceId: report.id,
+        relatedResourceType: 'moderation_report',
+        actionUrl: '/student-notes/user/moderation-warnings'
+      });
+      await notificationRepository.save(notification);
+
+      console.log(`📧 NOTIFICATION: Sent ${action} notification to user ${author.email}`);
+
+      // Notificar a los padres si el usuario es un estudiante
+      console.log(`🔍 CHECKING PARENT NOTIFICATION: author.role=${author.role}, isStudent=${author.role === 'student'}`);
+      if (author.role === 'student') {
+        console.log(`🚀 CALLING PARENT NOTIFICATION for student ${author.email}`);
+        await this.notifyParentsOfStudentModeration(author, action, report.moderatorComments, report);
+      }
+
+    } catch (error) {
+      console.error('❌ NOTIFICATION: Error sending moderation notification:', error);
+      // No lanzar error para no interrumpir el flujo de moderación
+    }
+  }
+
+  /**
+   * Notificar a los padres cuando un estudiante recibe una acción de moderación
+   */
+  private async notifyParentsOfStudentModeration(
+    student: User,
+    actionTaken: ModerationAction,
+    moderatorComment: string,
+    report: ModerationReport
+  ): Promise<void> {
+    try {
+      console.log(`🔍 PARENT NOTIFICATION: Starting notification process for student ${student.id} (${student.email})`);
+      
+      // Buscar al estudiante con su información completa
+      const studentEntity = await this.dataSource
+        .getRepository(User)
+        .createQueryBuilder('user')
+        .leftJoinAndSelect('user.student', 'student')
+        .leftJoinAndSelect('user.profile', 'userProfile')
+        .where('user.id = :userId', { userId: student.id })
+        .andWhere('user.role = :role', { role: 'student' })
+        .getOne();
+
+      console.log(`🔍 PARENT NOTIFICATION: Student entity query result:`, {
+        found: !!studentEntity,
+        studentId: studentEntity?.id,
+        userId: studentEntity?.id,
+        userEmail: studentEntity?.email
+      });
+
+      if (!studentEntity) {
+        console.log(`❌ PARENT NOTIFICATION: Student entity not found for user ${student.id}`);
+        return;
+      }
+
+      // Buscar las relaciones familiares de este estudiante
+      const families = await this.dataSource
+        .getRepository(Family)
+        .createQueryBuilder('family')
+        .leftJoinAndSelect('family.primaryContact', 'primaryContact')
+        .leftJoinAndSelect('family.secondaryContact', 'secondaryContact')
+        .leftJoinAndSelect('primaryContact.profile', 'primaryProfile')
+        .leftJoinAndSelect('secondaryContact.profile', 'secondaryProfile')
+        .leftJoinAndSelect('family.students', 'student')
+        .where('student.id = :studentId', { studentId: studentEntity?.id })
+        .getMany();
+
+      console.log(`🔍 PARENT NOTIFICATION: Family relationships query result:`, {
+        familiesFound: families?.length || 0,
+        studentId: studentEntity?.id
+      });
+
+      if (!families || families.length === 0) {
+        console.log(`❌ PARENT NOTIFICATION: No family relationships found for student ${studentEntity?.id}`);
+        return;
+      }
+
+      const notificationRepository = this.dataSource.getRepository(Notification);
+
+      // Crear notificaciones para cada padre/tutor
+      for (const family of families) {
+        const parents = [];
+        
+        if (family.primaryContact) {
+          parents.push(family.primaryContact);
+        }
+        if (family.secondaryContact) {
+          parents.push(family.secondaryContact);
+        }
+
+        for (const parent of parents) {
+          // Crear título y contenido específicos para padres
+          let parentTitle: string;
+          let parentContent: string;
+
+          switch (actionTaken) {
+            case ModerationAction.WARN_USER:
+              parentTitle = `⚠️ Advertencia de Moderación - ${student.profile?.firstName || ''} ${student.profile?.lastName || ''}`;
+              parentContent = `Su hijo/a ${student.profile?.firstName || ''} ${student.profile?.lastName || ''} ha recibido una advertencia de moderación por su comportamiento en la plataforma.\n\nMotivo: ${moderatorComment || 'Comportamiento inapropiado'}\n\nLe recomendamos hablar con su hijo/a sobre las normas de la comunidad y la importancia de mantener un comportamiento apropiado en línea.`;
+              break;
+            case ModerationAction.DELETE:
+              parentTitle = `🗑️ Contenido Removido - ${student.profile?.firstName || ''} ${student.profile?.lastName || ''}`;
+              parentContent = `El contenido publicado por su hijo/a ${student.profile?.firstName || ''} ${student.profile?.lastName || ''} ha sido removido por incumplir las normas de la comunidad.\n\nMotivo: ${moderatorComment || 'Violación de las normas'}`;
+              break;
+            case ModerationAction.FLAG:
+              parentTitle = `🚩 Contenido Marcado - ${student.profile?.firstName || ''} ${student.profile?.lastName || ''}`;
+              parentContent = `El contenido de su hijo/a ${student.profile?.firstName || ''} ${student.profile?.lastName || ''} ha sido marcado para revisión.\n\nMotivo: ${moderatorComment || 'Contenido requiere revisión'}`;
+              break;
+            default:
+              parentTitle = `📋 Acción de Moderación - ${student.profile?.firstName || ''} ${student.profile?.lastName || ''}`;
+              parentContent = `Se ha tomado una acción de moderación sobre el contenido de su hijo/a ${student.profile?.firstName || ''} ${student.profile?.lastName || ''}.\n\nMotivo: ${moderatorComment || 'Acción de moderación aplicada'}`;
+          }
+
+          // Crear la notificación para el padre
+          const notification = notificationRepository.create({
+            userId: parent.id,
+            title: parentTitle,
+            content: parentContent,
+            type: 'moderation' as any,
+            status: 'unread' as any,
+            relatedResourceId: report.id,
+            relatedResourceType: 'moderation_report_parent',
+            actionUrl: '/family/moderation-warnings'
+          });
+          await notificationRepository.save(notification);
+
+          console.log(`📧 PARENT NOTIFICATION: Sent to ${parent.profile?.firstName || ''} ${parent.profile?.lastName || ''} (${parent.id}) for student ${student.profile?.firstName || ''} ${student.profile?.lastName || ''}`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ PARENT NOTIFICATION: Error notifying parents of student moderation:', error);
+    }
+  }
+
+  /**
+   * Notificar a moderadores sobre nuevo reporte
+   */
+  private async notifyModeratorsOfNewReport(report: ModerationReport): Promise<void> {
+    try {
+      // Obtener todos los usuarios con rol admin (moderadores)
+      const moderators = await this.userRepository.find({
+        where: { role: UserRole.ADMIN, isActive: true },
+        relations: ['profile']
+      });
+
+      if (moderators.length === 0) {
+        console.warn('⚠️ NOTIFICATION: No moderators found to notify');
+        return;
+      }
+
+      // Obtener datos del reporte
+      const reportWithDetails = await this.moderationReportRepository.findOne({
+        where: { id: report.id },
+        relations: ['note', 'note.author', 'note.author.profile', 'reportedBy', 'reportedBy.profile']
+      });
+
+      if (!reportWithDetails) {
+        console.error('❌ NOTIFICATION: Report not found for notification');
+        return;
+      }
+
+      const notificationRepository = this.dataSource.getRepository('Notification');
+
+      // Crear título y contenido de la notificación
+      const authorName = reportWithDetails.note.author?.profile 
+        ? `${reportWithDetails.note.author.profile.firstName} ${reportWithDetails.note.author.profile.lastName}`
+        : reportWithDetails.note.author?.email || 'Usuario desconocido';
+      
+      const reporterName = reportWithDetails.reportedBy?.profile
+        ? `${reportWithDetails.reportedBy.profile.firstName} ${reportWithDetails.reportedBy.profile.lastName}`
+        : reportWithDetails.autoGenerated 
+          ? 'Sistema Automático'
+          : 'Usuario anónimo';
+
+      const reasonText = this.getModerationReasonText(report.reason);
+      
+      const title = `🚨 Nuevo Reporte de Moderación`;
+      const content = `Se ha creado un nuevo reporte que requiere moderación:
+
+**Motivo:** ${reasonText}
+**Autor del contenido:** ${authorName}
+**Reportado por:** ${reporterName}
+**Prioridad:** ${report.priority}/5
+**Contenido:** "${reportWithDetails.note.title?.substring(0, 100)}..."
+
+Accede al panel de moderación para revisar este reporte.`;
+
+      // Crear notificaciones para todos los moderadores
+      const notifications = moderators.map(moderator => 
+        notificationRepository.create({
+          userId: moderator.id,
+          title,
+          content,
+          type: 'moderation' as any,
+          status: 'unread' as any,
+          relatedResourceId: report.id,
+          relatedResourceType: 'moderation_report',
+          actionUrl: '/admin/student-notes?tab=reports'
+        })
+      );
+
+      await notificationRepository.save(notifications);
+
+      console.log(`📧 NOTIFICATION: Notified ${moderators.length} moderators about new report ${report.id}`);
+
+    } catch (error) {
+      console.error('❌ NOTIFICATION: Error notifying moderators:', error);
+      // No lanzar error para no interrumpir el flujo de moderación
+    }
+  }
+
+  /**
+   * Obtener texto legible para el motivo de moderación
+   */
+  private getModerationReasonText(reason: ModerationReason): string {
+    const reasonMap = {
+      [ModerationReason.SPAM]: 'Contenido spam',
+      [ModerationReason.HARASSMENT]: 'Acoso o intimidación',
+      [ModerationReason.VIOLENCE]: 'Contenido violento',
+      [ModerationReason.ADULT_CONTENT]: 'Contenido para adultos',
+      [ModerationReason.COPYRIGHT]: 'Violación de derechos de autor',
+      [ModerationReason.INAPPROPRIATE_CONTENT]: 'Contenido inapropiado',
+      [ModerationReason.FAKE_NEWS]: 'Noticias falsas',
+      [ModerationReason.OTHER]: 'Otro motivo'
+    };
+    return reasonMap[reason] || 'Motivo desconocido';
+  }
+
+  /**
+   * Procesar reportes vencidos según maxModerationHours
+   */
+  async processExpiredReports(): Promise<{
+    processed: number;
+    autoApproved: number;
+    notified: number;
+  }> {
+    const config = await this.getConfig();
+    if (!config?.maxModerationHours) {
+      return { processed: 0, autoApproved: 0, notified: 0 };
+    }
+
+    console.log(`🕒 MODERATION: Processing expired reports (maxHours: ${config.maxModerationHours})`);
+
+    // Calcular fecha límite
+    const maxHours = config.maxModerationHours;
+    const cutoffDate = new Date();
+    cutoffDate.setHours(cutoffDate.getHours() - maxHours);
+
+    // Buscar reportes vencidos (pendientes y creados antes de cutoffDate)
+    const expiredReports = await this.moderationReportRepository
+      .createQueryBuilder('report')
+      .leftJoinAndSelect('report.note', 'note')
+      .leftJoinAndSelect('note.author', 'author')
+      .leftJoinAndSelect('author.profile', 'authorProfile')
+      .where('report.status = :status', { status: ModerationStatus.PENDING })
+      .andWhere('report.createdAt < :cutoffDate', { cutoffDate })
+      .getMany();
+
+    if (expiredReports.length === 0) {
+      console.log('✅ MODERATION: No expired reports found');
+      return { processed: 0, autoApproved: 0, notified: 0 };
+    }
+
+    let autoApproved = 0;
+    let notified = 0;
+
+    // Procesar cada reporte vencido
+    for (const report of expiredReports) {
+      try {
+        // Auto-aprobar reportes de baja prioridad (prioridad >= 4)
+        if (report.priority >= 4) {
+          report.status = ModerationStatus.APPROVED;
+          report.action = ModerationAction.APPROVE;
+          report.moderatorComments = `Auto-aprobado por timeout (${maxHours}h sin revisión)`;
+          report.resolvedAt = new Date();
+          report.moderatorId = null; // Sistema automático
+
+          await this.moderationReportRepository.save(report);
+          autoApproved++;
+
+          console.log(`✅ MODERATION: Auto-approved low priority expired report ${report.id}`);
+        } else {
+          // Para reportes de alta prioridad, notificar a moderadores urgentemente
+          await this.notifyModeratorsUrgentExpiredReport(report, maxHours);
+          notified++;
+
+          console.log(`🚨 MODERATION: Notified moderators about high priority expired report ${report.id}`);
+        }
+      } catch (error) {
+        console.error(`❌ MODERATION: Error processing expired report ${report.id}:`, error);
+      }
+    }
+
+    const result = {
+      processed: expiredReports.length,
+      autoApproved,
+      notified
+    };
+
+    console.log(`✅ MODERATION: Processed ${result.processed} expired reports:`, result);
+    return result;
+  }
+
+  /**
+   * Notificar urgentemente a moderadores sobre reportes vencidos de alta prioridad
+   */
+  private async notifyModeratorsUrgentExpiredReport(report: ModerationReport, maxHours: number): Promise<void> {
+    try {
+      const moderators = await this.userRepository.find({
+        where: { role: UserRole.ADMIN, isActive: true },
+        relations: ['profile']
+      });
+
+      if (moderators.length === 0) return;
+
+      const notificationRepository = this.dataSource.getRepository('Notification');
+      
+      const hoursExpired = Math.floor((new Date().getTime() - report.createdAt.getTime()) / (1000 * 60 * 60));
+      const reasonText = this.getModerationReasonText(report.reason);
+      
+      const title = `🚨 URGENTE: Reporte Vencido (${hoursExpired}h)`;
+      const content = `Un reporte de alta prioridad lleva ${hoursExpired} horas sin revisar (límite: ${maxHours}h):
+
+**Motivo:** ${reasonText}
+**Prioridad:** ${report.priority}/5
+**Creado:** ${report.createdAt.toLocaleString('es-ES')}
+**Estado:** Pendiente de revisión
+
+🚨 ACCIÓN REQUERIDA: Este reporte necesita atención inmediata.`;
+
+      const urgentNotifications = moderators.map(moderator => 
+        notificationRepository.create({
+          userId: moderator.id,
+          title,
+          content,
+          type: 'moderation' as any,
+          status: 'unread' as any,
+          relatedResourceId: report.id,
+          relatedResourceType: 'moderation_report',
+          actionUrl: '/admin/student-notes?tab=reports&priority=urgent'
+        })
+      );
+
+      await notificationRepository.save(urgentNotifications);
+
+      console.log(`🚨 NOTIFICATION: Sent urgent notifications to ${moderators.length} moderators about expired report ${report.id}`);
+
+    } catch (error) {
+      console.error('❌ NOTIFICATION: Error sending urgent expired report notification:', error);
+    }
+  }
+
+  /**
+   * Aplicar acción específica sobre la nota
+   */
+  private async applyActionToNote(
+    note: StudentNote,
+    action: ModerationAction,
+    moderator: User
+  ): Promise<void> {
+    switch (action) {
+      case ModerationAction.DELETE:
+        // Marcar la nota como eliminada (soft delete)
+        note.isPrivate = true;
+        note.metadata = {
+          ...note.metadata,
+          moderationDeleted: true,
+          deletedBy: moderator.id,
+          deletedAt: new Date().toISOString()
+        };
+        await this.noteRepository.save(note);
+        console.log(`🗑️ NOTE: Note ${note.id} marked as deleted by moderation`);
+        break;
+      
+      case ModerationAction.FLAG:
+        // Marcar la nota como marcada
+        note.metadata = {
+          ...note.metadata,
+          moderationFlagged: true,
+          flaggedBy: moderator.id,
+          flaggedAt: new Date().toISOString()
+        };
+        await this.noteRepository.save(note);
+        console.log(`🚩 NOTE: Note ${note.id} flagged by moderation`);
+        break;
+      
+      case ModerationAction.APPROVE:
+        // APPROVE: El reporte es válido, el contenido es problemático → ocultar nota
+        note.isPrivate = true;
+        note.metadata = {
+          ...note.metadata,
+          moderationApproved: true,
+          hiddenByModeration: true,
+          hiddenBy: moderator.id,
+          hiddenAt: new Date().toISOString(),
+          hiddenReason: 'Contenido inapropiado confirmado por moderación'
+        };
+        await this.noteRepository.save(note);
+        console.log(`✅ NOTE: Note ${note.id} hidden due to approved moderation report`);
+        break;
+      
+      case ModerationAction.REJECT:
+        // REJECT: El reporte no es válido, el contenido es seguro → marcar como revisado
+        note.metadata = {
+          ...note.metadata,
+          moderationRejected: true,
+          reviewedByModeration: true,
+          reviewedBy: moderator.id,
+          reviewedAt: new Date().toISOString(),
+          reviewNotes: 'Contenido revisado y considerado apropiado'
+        };
+        await this.noteRepository.save(note);
+        console.log(`❌ NOTE: Note ${note.id} marked as safe after rejected moderation report`);
+        break;
+      
+      case ModerationAction.WARN_USER:
+        // WARN_USER: Advertir al usuario pero mantener contenido visible
+        note.metadata = {
+          ...note.metadata,
+          moderationWarning: true,
+          warnedBy: moderator.id,
+          warnedAt: new Date().toISOString()
+        };
+        await this.noteRepository.save(note);
+        console.log(`⚠️ NOTE: Note ${note.id} marked with user warning`);
+        break;
+    }
+  }
+
+  /**
+   * Obtener advertencias de moderación para un usuario específico
+   */
+  async getUserWarnings(userId: string): Promise<ModerationReport[]> {
+    return await this.moderationReportRepository.find({
+      where: {
+        note: {
+          authorId: userId
+        },
+        action: ModerationAction.WARN_USER
+      },
+      relations: ['note', 'moderator', 'moderator.profile'],
+      order: {
+        createdAt: 'DESC'
+      }
+    });
+  }
+
+
+  // ===============================
+  // CRON JOB PARA ESCANEO AUTOMÁTICO
+  // ===============================
+
+  /**
+   * Cron job que ejecuta escaneo automático cada 10 minutos
+   * Solo se ejecuta si la auto-moderación está habilitada
+   */
+  @Cron('0 */10 * * * *') // Cada 10 minutos
+  async automaticScan() {
+    try {
+      this.logger.log('🔄 CRON: Starting automatic moderation scan...');
+      
+      const config = await this.getConfig();
+      if (!config?.autoModerationEnabled) {
+        this.logger.log('⏭️ CRON: Auto-moderation disabled, skipping scan');
+        return;
+      }
+
+      // Escanear contenido de notas existente
+      const result = await this.scanExistingContent();
+      this.logger.log(`✅ CRON: Notes scan completed. Scanned: ${result.scanned}, Flagged: ${result.flagged}`);
+      
+      // Escanear comentarios existentes en la plataforma
+      const commentsResult = await this.scanExistingComments();
+      this.logger.log(`✅ CRON: Comments scan completed. Scanned: ${commentsResult.scanned}, Flagged: ${commentsResult.flagged}`);
+      
+      const totalFlagged = result.flagged + commentsResult.flagged;
+      const totalScanned = result.scanned + commentsResult.scanned;
+      
+      this.logger.log(`📊 CRON: Total scan results - Scanned: ${totalScanned}, Flagged: ${totalFlagged}`);
+      
+      if (totalFlagged > 0) {
+        this.logger.warn(`⚠️ CRON: Found ${totalFlagged} new flagged items requiring moderation (${result.flagged} notes, ${commentsResult.flagged} comments)`);
+      }
+
+      // Procesar reportes flagged automáticamente
+      const processedResult = await this.processFlaggedReports();
+      this.logger.log(`🤖 CRON: Processed flagged reports. Processed: ${processedResult.processed}, Warned: ${processedResult.warned}`);
+
+    } catch (error) {
+      this.logger.error(`❌ CRON: Automatic scan failed: ${error.message}`, error.stack);
+    }
+  }
+
+  /**
+   * Procesar reportes con status "flagged" automáticamente
+   * Convierte reportes flagged en acciones específicas (warn_user)
+   */
+  async processFlaggedReports(): Promise<{ processed: number; warned: number }> {
+    try {
+      console.log('🤖 AUTO-PROCESSING: Starting flagged reports processing...');
+      
+      const config = await this.getConfig();
+      if (!config?.autoModerationEnabled || !config?.notifyUsersOnAction) {
+        console.log('❌ AUTO-PROCESSING: Auto-moderation or notifications disabled');
+        return { processed: 0, warned: 0 };
+      }
+
+      // Buscar reportes flagged que necesitan procesamiento
+      const flaggedReports = await this.moderationReportRepository.find({
+        where: { 
+          status: ModerationStatus.FLAGGED,
+          action: null // Reportes sin acción aún
+        },
+        relations: ['note', 'note.author', 'note.author.profile'],
+        order: { priority: 'ASC', createdAt: 'ASC' },
+        take: 50 // Procesar máximo 50 por vez para evitar sobrecarga
+      });
+
+      console.log(`🤖 AUTO-PROCESSING: Found ${flaggedReports.length} flagged reports to process`);
+
+      if (flaggedReports.length === 0) {
+        return { processed: 0, warned: 0 };
+      }
+
+      let processed = 0;
+      let warned = 0;
+
+      for (const report of flaggedReports) {
+        try {
+          // Crear un usuario automático para el sistema de moderación
+          const systemModerator = {
+            id: null, // Sistema automático
+            email: 'sistema@moderacion.auto'
+          } as User;
+
+          // Determinar acción basada en prioridad
+          let actionToTake: ModerationAction;
+          let moderatorComments: string;
+
+          if (report.priority <= 2) {
+            // Alta prioridad - Advertir al usuario
+            actionToTake = ModerationAction.WARN_USER;
+            moderatorComments = 'Advertencia automática: Contenido detectado como inapropiado por el sistema de moderación automática. Por favor, revisa las normas de la comunidad.';
+            warned++;
+          } else if (report.priority <= 4) {
+            // Prioridad media - Marcar para revisión
+            actionToTake = ModerationAction.FLAG;
+            moderatorComments = 'Marcado automáticamente para revisión manual debido a contenido potencialmente problemático.';
+          } else {
+            // Baja prioridad - Aprobar
+            actionToTake = ModerationAction.APPROVE;
+            moderatorComments = 'Auto-aprobado: Contenido de baja prioridad sin problemas significativos detectados.';
+          }
+
+          // Actualizar el reporte
+          report.action = actionToTake;
+          report.moderatorComments = moderatorComments;
+          report.resolvedAt = new Date();
+          report.moderatorId = null; // Sistema automático
+
+          // Determinar el nuevo estado
+          switch (actionToTake) {
+            case ModerationAction.APPROVE:
+              report.status = ModerationStatus.APPROVED;
+              break;
+            case ModerationAction.WARN_USER:
+            case ModerationAction.FLAG:
+              report.status = ModerationStatus.PENDING; // Mantener pending para warn_user
+              break;
+          }
+
+          // Aplicar la acción sobre la nota
+          await this.applyActionToNote(report.note, actionToTake, systemModerator);
+
+          // Guardar el reporte actualizado
+          const updatedReport = await this.moderationReportRepository.save(report);
+          processed++;
+
+          console.log(`🤖 AUTO-PROCESSING: Applied ${actionToTake} to report ${report.id} (priority: ${report.priority})`);
+
+          // Notificar al autor si corresponde
+          if (report.note.author && config.notifyUsersOnAction) {
+            if (actionToTake === ModerationAction.WARN_USER || 
+                actionToTake === ModerationAction.FLAG) {
+              await this.notifyAuthorOfAction(report.note.author, updatedReport, actionToTake);
+              console.log(`📧 AUTO-PROCESSING: Sent notification to ${report.note.author.email} for action ${actionToTake}`);
+            }
+          }
+
+        } catch (error) {
+          console.error(`❌ AUTO-PROCESSING: Error processing report ${report.id}:`, error);
+        }
+      }
+
+      const result = { processed, warned };
+      console.log(`✅ AUTO-PROCESSING: Completed. Processed: ${processed}, Warned: ${warned}`);
+      return result;
+
+    } catch (error) {
+      console.error('❌ AUTO-PROCESSING: Error in processFlaggedReports:', error);
+      return { processed: 0, warned: 0 };
+    }
+  }
+
+  /**
+   * Escanear todos los comentarios existentes en la plataforma
+   * Se ejecuta como parte del cron job de moderación automática
+   */
+  async scanExistingComments(): Promise<{ scanned: number; flagged: number }> {
+    console.log('🔍 COMMENT SCAN: Starting individual comment scanning...');
+    
+    const config = await this.getConfig();
+    if (!config?.autoModerationEnabled) {
+      console.log('❌ COMMENT SCAN: Auto-moderation disabled, returning');
+      return { scanned: 0, flagged: 0 };
+    }
+
+    console.log('🔍 COMMENT SCAN: Fetching all comments with relations...');
+    const comments = await this.commentRepository.find({
+      relations: ['user', 'user.profile', 'sharedNote', 'sharedNote.note'],
+      order: { createdAt: 'DESC' },
+      take: 1000 // Limitar para evitar sobrecarga
+    });
+
+    console.log(`🔍 COMMENT SCAN: Found ${comments.length} comments to scan`);
+    let flagged = 0;
+    let scanned = 0;
+
+    for (const comment of comments) {
+      scanned++;
+      console.log(`🔍 CHECKING COMMENT: ${comment.id} by ${comment.user?.email} - content preview: "${comment.content?.substring(0, 50)}..."`);
+      
+      // Verificar si ya existe un reporte para este comentario específico
+      const existingReport = await this.moderationReportRepository.findOne({
+        where: { 
+          noteId: comment.sharedNote.note.id,
+          commentId: comment.id 
+        }
+      });
+
+      if (existingReport) {
+        console.log(`⏭️ SKIP COMMENT: ${comment.id} already has report with status: ${existingReport.status}`);
+        continue;
+      }
+
+      // Analizar el contenido del comentario
+      const content = comment.content?.toLowerCase() || '';
+      
+      const foundBannedWords = config.bannedWords.filter(word => 
+        content.includes(word.toLowerCase())
+      );
+      
+      const foundSuspiciousPhrases = config.suspiciousPhrases?.filter(phrase => 
+        content.includes(phrase.toLowerCase())
+      ) || [];
+
+      if (foundBannedWords.length > 0 || foundSuspiciousPhrases.length > 0) {
+        const problems = [...foundBannedWords, ...foundSuspiciousPhrases];
+        console.log(`🚨 PROBLEMS FOUND in comment ${comment.id}: ${problems.join(', ')}`);
+        
+        try {
+          // Crear reporte específico para el comentario
+          const report = this.moderationReportRepository.create({
+            noteId: comment.sharedNote.note.id,
+            commentId: comment.id,
+            reportedById: null, // Auto-generado
+            reason: ModerationReason.INAPPROPRIATE_CONTENT,
+            description: `Auto-detectado en comentario durante escaneo: ${problems.join(', ')}`,
+            status: ModerationStatus.PENDING,
+            autoGenerated: true,
+            priority: this.calculatePriorityForComment(foundBannedWords, foundSuspiciousPhrases),
+            metadata: {
+              commentContent: comment.content,
+              commentAuthorEmail: comment.user?.email,
+              noteTitle: comment.sharedNote?.note?.title,
+              scanDetectedTerms: problems,
+              reportType: 'comment'
+            }
+          });
+
+          const savedReport = await this.moderationReportRepository.save(report);
+          flagged++;
+          
+          console.log(`✅ COMMENT FLAGGED: Created report ${savedReport.id} for comment ${comment.id}`);
+          
+        } catch (error) {
+          console.error(`❌ COMMENT SCAN ERROR: Failed to create report for comment ${comment.id}:`, error);
+        }
+      }
+    }
+
+    const result = { scanned, flagged };
+    console.log(`✅ COMMENT SCAN: Completed. Scanned: ${scanned}, Flagged: ${flagged}`);
+    return result;
+  }
+
+  /**
+   * Calcular prioridad específica para comentarios
+   */
+  private calculatePriorityForComment(bannedWords: string[], suspiciousPhrases: string[]): number {
+    let priority = 5; // Prioridad base
+
+    // Palabras prohibidas tienen más peso
+    if (bannedWords.length > 0) {
+      priority = Math.max(1, priority - bannedWords.length * 2);
+    }
+
+    // Frases sospechosas tienen menos peso
+    if (suspiciousPhrases.length > 0) {
+      priority = Math.max(1, priority - suspiciousPhrases.length);
+    }
+
+    return Math.min(5, Math.max(1, priority));
+  }
+}

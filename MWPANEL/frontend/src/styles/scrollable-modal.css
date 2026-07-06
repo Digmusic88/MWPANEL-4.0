@@ -1,0 +1,61 @@
+/**
+ * Estilos globales para ScrollableModal y Drawers
+ *
+ * Mejora la apariencia del scroll en los modales y drawers
+ * Funciona en Chrome, Firefox, Safari y Edge
+ */
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+.ant-modal-body::-webkit-scrollbar,
+.ant-drawer-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.ant-modal-body::-webkit-scrollbar-track,
+.ant-drawer-body::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 4px;
+}
+
+.ant-modal-body::-webkit-scrollbar-thumb,
+.ant-drawer-body::-webkit-scrollbar-thumb {
+  background: #c5ddc3;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.ant-modal-body::-webkit-scrollbar-thumb:hover,
+.ant-drawer-body::-webkit-scrollbar-thumb:hover {
+  background: #489e9d;
+}
+
+/* Firefox */
+.ant-modal-body,
+.ant-drawer-body {
+  scrollbar-width: thin;
+  scrollbar-color: #c5ddc3 #f0f0f0;
+}
+
+/* Smooth scroll behavior */
+.ant-modal-body,
+.ant-drawer-body {
+  scroll-behavior: smooth;
+}
+
+/* Animación de fade para el scroll */
+.ant-modal-body::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 20px;
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.8), transparent);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.ant-modal-body[data-scrolled="true"]::after {
+  opacity: 1;
+}

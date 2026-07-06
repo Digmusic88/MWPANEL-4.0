@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Educational Resources Metadata</title>
+</head>
+<body>
+    <h1>Debug Educational Resources Metadata</h1>
+    <div id="results"></div>
+    
+    <script>
+        async function debugMetadata() {
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                // Get token from localStorage (same as React app)
+                const token = localStorage.getItem('access_token');
+                console.log('Token from localStorage:', token ? 'Found' : 'Not found');
+                
+                if (!token) {
+                    resultsDiv.innerHTML = '<p style="color: red;">❌ No access token found in localStorage</p>';
+                    return;
+                }
+                
+                const headers = {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                };
+                
+                // Test subjects endpoint
+                console.log('Testing subjects endpoint...');
+                const subjectsResponse = await fetch('/api/recursos/metadata/subjects', { headers });
+                console.log('Subjects response status:', subjectsResponse.status);
+                
+                if (subjectsResponse.status === 401) {
+                    resultsDiv.innerHTML = '<p style="color: red;">❌ 401 Unauthorized - Token expired or invalid</p>';
+                    return;
+                }
+                
+                const subjectsData = await subjectsResponse.json();
+                console.log('Subjects data:', subjectsData);
+                
+                // Test levels endpoint
+                console.log('Testing levels endpoint...');
+                const levelsResponse = await fetch('/api/recursos/metadata/levels', { headers });
+                const levelsData = await levelsResponse.json();
+                console.log('Levels data:', levelsData);
+                
+                // Display results
+                resultsDiv.innerHTML = `
+                    <h2>✅ Success!</h2>
+                    <h3>📚 Subjects (${subjectsData.data?.length || 0} items):</h3>
+                    <ul>
+                        ${subjectsData.data?.slice(0, 5).map(s => `<li>${s.name} (${s.id})</li>`).join('') || '<li>No subjects found</li>'}
+                        ${subjectsData.data?.length > 5 ? '<li>... and more</li>' : ''}
+                    </ul>
+                    
+                    <h3>🎓 Educational Levels (${levelsData.data?.length || 0} items):</h3>
+                    <ul>
+                        ${levelsData.data?.map(l => `<li>${l.name} (${l.id})</li>`).join('') || '<li>No levels found</li>'}
+                    </ul>
+                    
+                    <h3>🔍 Debug Info:</h3>
+                    <pre>${JSON.stringify({ 
+                        subjectsStructure: {
+                            type: typeof subjectsData,
+                            hasData: 'data' in subjectsData,
+                            dataType: typeof subjectsData.data,
+                            dataLength: Array.isArray(subjectsData.data) ? subjectsData.data.length : 'Not array'
+                        },
+                        levelsStructure: {
+                            type: typeof levelsData,
+                            hasData: 'data' in levelsData,
+                            dataType: typeof levelsData.data,
+                            dataLength: Array.isArray(levelsData.data) ? levelsData.data.length : 'Not array'
+                        }
+                    }, null, 2)}</pre>
+                `;
+                
+            } catch (error) {
+                console.error('Error:', error);
+                resultsDiv.innerHTML = `<p style="color: red;">❌ Error: ${error.message}</p>`;
+            }
+        }
+        
+        // Run debug on page load
+        debugMetadata();
+    </script>
+</body>
+</html>

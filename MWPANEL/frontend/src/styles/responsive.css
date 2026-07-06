@@ -1,0 +1,828 @@
+/* Responsive utilities for MW Panel 2.0 */
+
+/* Container spacing responsive */
+.container-responsive {
+  @apply px-3 md:px-4 lg:px-6;
+}
+
+.container-responsive-y {
+  @apply py-3 md:py-4 lg:py-6;
+}
+
+.container-responsive-full {
+  @apply p-3 md:p-4 lg:p-6;
+}
+
+/* Card spacing responsive */
+.card-responsive {
+  @apply p-3 md:p-4 lg:p-6;
+}
+
+.card-responsive-sm {
+  @apply p-2 md:p-3 lg:p-4;
+}
+
+/* Gap utilities responsive */
+.gap-responsive {
+  @apply gap-2 md:gap-4 lg:gap-6;
+}
+
+.gap-responsive-sm {
+  @apply gap-1 md:gap-2 lg:gap-3;
+}
+
+/* Grid responsive utilities */
+.grid-responsive-2 {
+  @apply grid grid-cols-1 md:grid-cols-2 gap-4;
+}
+
+.grid-responsive-3 {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4;
+}
+
+.grid-responsive-4 {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4;
+}
+
+/* Flex utilities responsive */
+.flex-responsive-col {
+  @apply flex flex-col md:flex-row gap-4;
+}
+
+/* Overflow utilities for responsive content */
+.container-scroll-x {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+  scrollbar-width: thin; /* Firefox */
+}
+
+.container-scroll-x::-webkit-scrollbar {
+  height: 6px;
+}
+
+.container-scroll-x::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.container-scroll-x::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.container-scroll-x::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Table container responsive */
+.table-container-responsive {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+}
+
+.table-container-responsive .ant-table-wrapper {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Mobile-specific table improvements */
+@media (max-width: 767px) {
+  .table-container-responsive {
+    margin: 0 -12px; /* Extend to screen edges on mobile */
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+  
+  .table-container-responsive .ant-table-wrapper {
+    padding: 0 12px;
+  }
+}
+
+/* Content that should stay within bounds */
+.content-contained {
+  max-width: 100%;
+  overflow: hidden;
+  word-wrap: break-word;
+  hyphens: auto;
+}
+
+.flex-responsive-row {
+  @apply flex flex-row flex-wrap gap-4;
+}
+
+/* Button groups responsive */
+.button-group-responsive {
+  @apply flex flex-col md:flex-row gap-2 md:gap-3;
+}
+
+.button-group-responsive .ant-btn {
+  @apply md:flex-shrink-0;
+}
+
+/* Form utilities responsive */
+.form-grid-responsive {
+  @apply grid grid-cols-1 md:grid-cols-2 gap-4;
+}
+
+.form-grid-responsive-3 {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4;
+}
+
+/* Typography responsive */
+.title-responsive {
+  @apply text-lg md:text-xl lg:text-2xl font-bold;
+}
+
+.subtitle-responsive {
+  @apply text-base md:text-lg lg:text-xl font-semibold;
+}
+
+.text-responsive {
+  @apply text-sm md:text-base;
+}
+
+.text-responsive-sm {
+  @apply text-xs md:text-sm;
+}
+
+/* Table responsive fixes */
+.table-responsive-container {
+  @apply overflow-x-auto;
+}
+
+.table-responsive-container .ant-table-thead > tr > th {
+  @apply text-xs md:text-sm whitespace-nowrap;
+}
+
+.table-responsive-container .ant-table-tbody > tr > td {
+  @apply text-xs md:text-sm;
+}
+
+/* Modal and drawer responsive */
+.modal-responsive-body {
+  @apply p-3 md:p-6;
+}
+
+.drawer-responsive-body {
+  @apply p-3 md:p-4;
+}
+
+/* Navigation responsive */
+.nav-responsive {
+  @apply hidden md:flex;
+}
+
+.nav-mobile {
+  @apply flex md:hidden;
+}
+
+/* Search and filters responsive */
+.search-responsive {
+  @apply w-full md:w-64 lg:w-80;
+}
+
+.filter-responsive {
+  @apply w-full md:w-auto;
+}
+
+.filters-container-responsive {
+  @apply flex flex-col md:flex-row gap-4 items-stretch md:items-center;
+}
+
+/* Card grid responsive */
+.card-grid-responsive {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4;
+}
+
+.card-grid-responsive-2 {
+  @apply grid grid-cols-1 lg:grid-cols-2 gap-4;
+}
+
+/* Avatar responsive */
+.avatar-responsive {
+  @apply w-8 h-8 md:w-10 md:h-10;
+}
+
+.avatar-responsive-lg {
+  @apply w-12 h-12 md:w-16 md:h-16;
+}
+
+/* Sidebar responsive fixes */
+.sidebar-responsive .ant-menu-item {
+  @apply text-sm;
+}
+
+.sidebar-responsive .ant-menu-submenu-title {
+  @apply text-sm;
+}
+
+/* Mobile specific utilities */
+@media (max-width: 767px) {
+  .mobile-full-width {
+    width: 100% !important;
+  }
+  
+  .mobile-stack {
+    flex-direction: column !important;
+  }
+  
+  .mobile-center {
+    text-align: center !important;
+  }
+  
+  .mobile-hide {
+    display: none !important;
+  }
+  
+  .mobile-show {
+    display: block !important;
+  }
+  
+  /* Override Ant Design components for mobile */
+  .ant-card {
+    margin-bottom: 12px;
+  }
+  
+  .ant-card-body {
+    padding: 16px 12px !important;
+  }
+  
+  .ant-table-tbody > tr > td {
+    padding: 8px 6px !important;
+  }
+  
+  .ant-table-thead > tr > th {
+    padding: 8px 6px !important;
+  }
+  
+  .ant-btn {
+    height: 36px !important;
+    font-size: 14px !important;
+  }
+  
+  .ant-input {
+    height: 36px !important;
+  }
+  
+  .ant-select-selector {
+    height: 36px !important;
+  }
+  
+  .ant-form-item {
+    margin-bottom: 16px !important;
+  }
+  
+  .ant-space-item {
+    margin-bottom: 8px !important;
+  }
+  
+  .ant-dropdown-menu {
+    font-size: 14px !important;
+  }
+  
+  .ant-menu-item {
+    height: 48px !important;
+    line-height: 48px !important;
+  }
+}
+
+/* Tablet specific utilities */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .tablet-hide {
+    display: none !important;
+  }
+  
+  .tablet-show {
+    display: block !important;
+  }
+  
+  .tablet-stack {
+    flex-direction: column !important;
+  }
+}
+
+/* Touch-friendly interfaces */
+@media (hover: none) and (pointer: coarse) {
+  .ant-btn {
+    min-height: 44px !important;
+  }
+  
+  .ant-menu-item {
+    min-height: 48px !important;
+  }
+  
+  .ant-table-tbody > tr > td {
+    min-height: 44px !important;
+  }
+}
+
+/* High DPI screens */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .ant-table-thead > tr > th,
+  .ant-table-tbody > tr > td {
+    border-width: 0.5px;
+  }
+}
+
+/* Calendar Widget Responsive Styles */
+
+/* Base Calendar Styles */
+.calendar-widget {
+  position: relative;
+  overflow: hidden;
+}
+
+.calendar-widget .ant-card-body {
+  padding: 16px !important;
+  height: 100%;
+  overflow: hidden;
+}
+
+.calendar-widget .ant-picker-calendar {
+  background: transparent !important;
+  height: 100% !important;
+}
+
+.calendar-widget .ant-picker-calendar .ant-picker-panel {
+  background: transparent !important;
+  height: 100% !important;
+}
+
+.calendar-widget .ant-picker-calendar .ant-picker-body {
+  height: 100% !important;
+}
+
+.calendar-widget .ant-picker-calendar-date {
+  border: 1px solid #f0f0f0;
+  transition: all 0.2s;
+}
+
+.calendar-widget .ant-picker-calendar-date:hover {
+  background-color: #f9f9f9;
+}
+
+.calendar-widget .ant-picker-calendar-date-today {
+  border-color: #1890ff;
+  background-color: #e6f7ff;
+}
+
+/* Mobile Layout */
+.calendar-widget .mobile-calendar-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: auto;
+}
+
+.calendar-widget .mobile-calendar-container {
+  width: 100%;
+  overflow-x: auto;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.calendar-widget .mobile-calendar-container .ant-picker-calendar-date {
+  touch-action: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.calendar-widget .mobile-calendar-container .ant-picker-calendar-date:active {
+  background-color: rgba(24, 144, 255, 0.1);
+  transform: scale(0.95);
+  transition: all 0.1s ease;
+}
+
+.calendar-widget .ant-picker-calendar .ant-picker-calendar-date {
+  position: relative;
+  padding: 4px;
+}
+
+@media (max-width: 768px) {
+  .calendar-widget .ant-picker-calendar .ant-picker-calendar-date {
+    min-height: 40px;
+    padding: 2px;
+  }
+}
+
+.calendar-widget .mobile-calendar-widget .ant-picker-calendar {
+  background: transparent;
+  min-height: 300px;
+}
+
+.calendar-widget .mobile-events-collapse {
+  margin-top: 12px;
+}
+
+.calendar-widget .mobile-events-collapse .ant-collapse-header {
+  padding: 8px 12px !important;
+  font-size: 14px !important;
+}
+
+.calendar-widget .mobile-events-collapse .ant-collapse-content-box {
+  padding: 8px 12px !important;
+}
+
+.calendar-widget .mobile-event-item {
+  cursor: pointer;
+  padding: 8px 0 !important;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.calendar-widget .mobile-event-item:hover {
+  background-color: #f5f5f5;
+}
+
+/* Desktop/Tablet Events Sidebar */
+.calendar-widget .events-sidebar {
+  display: block;
+}
+
+.calendar-widget .events-title {
+  font-size: 14px !important;
+  margin-bottom: 8px !important;
+}
+
+.calendar-widget .event-item {
+  cursor: pointer;
+  padding: 8px 0 !important;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.calendar-widget .event-item:hover {
+  background-color: #f5f5f5;
+}
+
+/* Event Details Modal */
+.calendar-widget .mobile-event-details .ant-descriptions-item-label {
+  font-size: 12px !important;
+  padding: 8px !important;
+}
+
+.calendar-widget .mobile-event-details .ant-descriptions-item-content {
+  font-size: 12px !important;
+  padding: 8px !important;
+}
+
+/* Calendar Responsive Breakpoints */
+@media (max-width: 767px) {
+  .calendar-widget .ant-picker-calendar {
+    background: #fff;
+  }
+  
+  .calendar-widget .ant-picker-calendar-header {
+    padding: 8px 12px !important;
+  }
+  
+  .calendar-widget .ant-picker-calendar-header .ant-picker-calendar-mode-switch {
+    font-size: 14px !important;
+  }
+  
+  .calendar-widget .ant-picker-calendar-date {
+    height: 40px !important;
+    min-height: 40px !important;
+    border-radius: 4px;
+  }
+  
+  .calendar-widget .ant-picker-calendar-date-value {
+    font-size: 12px !important;
+    line-height: 1.2;
+  }
+  
+  .calendar-widget .ant-picker-calendar-date-content {
+    height: auto !important;
+    min-height: auto !important;
+    font-size: 8px !important;
+  }
+  
+  /* Hide calendar navigation arrows on very small screens */
+  .calendar-widget .ant-picker-calendar-header .ant-select {
+    font-size: 12px !important;
+  }
+  
+  /* Responsive calendar month/year view */
+  .calendar-widget .ant-picker-calendar-month-panel .ant-picker-calendar-date {
+    height: 60px !important;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .calendar-widget .ant-picker-calendar-date {
+    height: 50px !important;
+    min-height: 50px !important;
+  }
+  
+  .calendar-widget .events-sidebar {
+    border-left: none;
+    border-top: 1px solid #f0f0f0;
+    padding-left: 0;
+    padding-top: 16px;
+    margin-top: 16px;
+  }
+}
+
+/* Desktop Styles */
+@media (min-width: 1024px) {
+  .calendar-widget .ant-row {
+    display: flex !important;
+    height: 100% !important;
+  }
+  
+  .calendar-widget .ant-col {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  .calendar-widget .ant-picker-calendar {
+    flex: 1 !important;
+    height: auto !important;
+    min-height: 550px !important;
+  }
+  
+  .calendar-widget .ant-picker-calendar .ant-picker-panel {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  .calendar-widget .ant-picker-calendar .ant-picker-body {
+    flex: 1 !important;
+    height: auto !important;
+  }
+  
+  .calendar-widget .ant-picker-calendar-date {
+    height: 80px !important;
+    min-height: 80px !important;
+    transition: transform 0.2s ease;
+  }
+  
+  /* Calendar container styles */
+  .calendar-widget .calendar-scroll-container {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  /* Calendar Navigation Scrollbar */
+  .calendar-widget .calendar-navigation-scrollbar {
+    height: 100%;
+    min-height: 600px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #fafafa;
+    border-radius: 8px;
+    border: 1px solid #f0f0f0;
+    padding: 30px 8px 50px 8px;
+  }
+  
+  .calendar-widget .calendar-nav-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 30px;
+    height: 100%;
+    min-height: 580px;
+    justify-content: space-around;
+    padding: 50px 0 60px 0;
+  }
+  
+  .calendar-widget .calendar-nav-btn {
+    border: 1px solid #d9d9d9;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    background: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: #595959;
+  }
+  
+  .calendar-widget .calendar-nav-btn:hover {
+    background: #1890ff;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(24, 144, 255, 0.3);
+  }
+  
+  .calendar-widget .calendar-nav-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(24, 144, 255, 0.5);
+  }
+  
+  .calendar-widget .calendar-nav-indicator {
+    flex: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    min-height: 80px;
+    max-height: 100px;
+  }
+  
+  .calendar-widget .nav-month-indicator {
+    font-size: 12px;
+    font-weight: bold;
+    color: #1890ff;
+    margin-bottom: 12px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
+  
+  .calendar-widget .nav-week-indicator {
+    font-size: 11px;
+    color: #666;
+    background: #e6f7ff;
+    padding: 4px 6px;
+    border-radius: 6px;
+    writing-mode: horizontal-tb;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border: 1px solid #b3d9ff;
+  }
+  
+  /* Date cell hover effects */
+  .calendar-widget .ant-picker-calendar-date:hover .add-event-indicator {
+    opacity: 1 !important;
+  }
+  
+  .calendar-widget .ant-picker-calendar-date:hover {
+    transform: scale(1.02);
+    z-index: 10;
+    position: relative;
+  }
+}
+
+/* Tablet Styles */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .calendar-widget .ant-picker-calendar-date {
+    height: 50px !important;
+    min-height: 50px !important;
+  }
+  
+  .calendar-widget .events-sidebar {
+    border-left: none;
+    border-top: 1px solid #f0f0f0;
+    padding-left: 0;
+    padding-top: 16px;
+    margin-top: 16px;
+  }
+}
+
+/* My Children Page Styles */
+.child-card {
+  transition: all 0.3s ease;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.child-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.child-card .ant-card-cover {
+  border-radius: 12px 12px 0 0;
+}
+
+.child-card .ant-card-body {
+  padding: 16px;
+}
+
+.child-card .ant-statistic-title {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.child-card .ant-statistic-content {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+@media (max-width: 767px) {
+  .child-card .ant-card-body {
+    padding: 12px;
+  }
+  
+  .child-card .ant-statistic-content {
+    font-size: 14px;
+  }
+}
+
+/* Print styles */
+@media print {
+  .mobile-hide,
+  .print-hide {
+    display: none !important;
+  }
+  
+  .ant-btn {
+    display: none !important;
+  }
+  
+  .ant-card {
+    box-shadow: none !important;
+    border: 1px solid #d9d9d9 !important;
+  }
+  
+  .calendar-widget .mobile-events-collapse,
+  .calendar-widget .events-sidebar {
+    display: none !important;
+  }
+}
+
+/* Enhanced calendar cell interaction feedback */
+.calendar-widget .ant-picker-calendar-date {
+  transition: all 0.2s ease !important;
+  border-radius: 4px !important;
+}
+
+.calendar-widget .ant-picker-calendar-date:hover {
+  background-color: rgba(24, 144, 255, 0.08) !important;
+  transform: scale(1.02) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+.calendar-widget .ant-picker-calendar-date:active {
+  background-color: rgba(24, 144, 255, 0.15) !important;
+  transform: scale(0.98) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Mobile-specific calendar feedback */
+@media (max-width: 767px) {
+  .calendar-widget .ant-picker-calendar-date:active {
+    background-color: rgba(24, 144, 255, 0.12) !important;
+    transform: scale(0.95) !important;
+  }
+  
+  .calendar-widget .ant-picker-calendar-date:hover {
+    background-color: rgba(24, 144, 255, 0.06) !important;
+    transform: none !important;
+  }
+}
+
+/* Calendar Page (Shared CalendarPage component) specific styles */
+.ant-picker-calendar-date-content .events {
+  list-style: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.ant-picker-calendar-date-content .events li {
+  margin: 1px 0 !important;
+  line-height: 1.2 !important;
+}
+
+/* Admin Calendar Page - Enhanced clickable cells */
+.ant-picker-calendar .ant-picker-calendar-date {
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  border-radius: 6px !important;
+  position: relative !important;
+}
+
+.ant-picker-calendar .ant-picker-calendar-date:hover {
+  background-color: rgba(24, 144, 255, 0.08) !important;
+  transform: scale(1.02) !important;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15) !important;
+}
+
+.ant-picker-calendar .ant-picker-calendar-date:active {
+  background-color: rgba(24, 144, 255, 0.15) !important;
+  transform: scale(0.98) !important;
+}
+
+/* Add subtle hint for clickable calendar days */
+.ant-picker-calendar .ant-picker-calendar-date:hover::after {
+  content: "📅 Clic para crear evento";
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  white-space: nowrap;
+  z-index: 1000;
+  pointer-events: none;
+}

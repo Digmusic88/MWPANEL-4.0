@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Student Notifications</title>
+</head>
+<body>
+    <h1>Debug Student Notifications</h1>
+    <div id="debug-info"></div>
+    
+    <script>
+        // Debug script to check if student is logged in and can access notifications
+        async function debugNotifications() {
+            const debugInfo = document.getElementById('debug-info');
+            let output = '<h2>Debug Information:</h2>';
+            
+            try {
+                // Check if user is logged in
+                const token = localStorage.getItem('access_token');
+                output += `<p><strong>Token exists:</strong> ${!!token}</p>`;
+                
+                if (!token) {
+                    output += '<p style="color: red;">No access token found. Please log in as a student first.</p>';
+                    debugInfo.innerHTML = output;
+                    return;
+                }
+                
+                // Check user role
+                const authResponse = await fetch('/api/auth/me', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (authResponse.ok) {
+                    const user = await authResponse.json();
+                    output += `<p><strong>User role:</strong> ${user.role}</p>`;
+                    output += `<p><strong>User email:</strong> ${user.email}</p>`;
+                    
+                    if (user.role === 'student') {
+                        // Test notifications endpoint
+                        const notifResponse = await fetch('/api/students/notifications', {
+                            headers: {
+                                'Authorization': `Bearer ${token}`
+                            }
+                        });
+                        
+                        if (notifResponse.ok) {
+                            const notifications = await notifResponse.json();
+                            output += `<p style="color: green;"><strong>Notifications API works!</strong></p>`;
+                            output += `<p><strong>Total notifications:</strong> ${notifications.totalNotifications}</p>`;
+                            output += `<p><strong>Unviewed notifications:</strong> ${notifications.unviewedNotifications}</p>`;
+                            output += '<h3>Notifications:</h3><ul>';
+                            notifications.notifications.forEach(notif => {
+                                output += `<li>${notif.title} (${notif.priority})</li>`;
+                            });
+                            output += '</ul>';
+                        } else {
+                            output += `<p style="color: red;"><strong>Notifications API failed:</strong> ${notifResponse.status} ${notifResponse.statusText}</p>`;
+                        }
+                    } else {
+                        output += '<p style="color: orange;">User is not a student. Please log in as a student.</p>';
+                    }
+                } else {
+                    output += `<p style="color: red;"><strong>Auth check failed:</strong> ${authResponse.status}</p>`;
+                }
+                
+            } catch (error) {
+                output += `<p style="color: red;"><strong>Error:</strong> ${error.message}</p>`;
+            }
+            
+            debugInfo.innerHTML = output;
+        }
+        
+        // Run debug on page load
+        debugNotifications();
+    </script>
+</body>
+</html>

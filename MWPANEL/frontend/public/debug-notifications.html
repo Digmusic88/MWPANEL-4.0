@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug - Botones de Eliminar Notificaciones</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            background: #f5f5f5; 
+        }
+        .debug-info { 
+            background: white; 
+            padding: 20px; 
+            margin: 20px 0; 
+            border-radius: 8px; 
+            border-left: 4px solid #1890ff; 
+        }
+        .success { border-left-color: #52c41a; }
+        .error { border-left-color: #f5222d; }
+        .warning { border-left-color: #faad14; }
+        .test-button {
+            background: #ff4d4f;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        pre { background: #f0f0f0; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        .status { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Debug: Funcionalidad de Eliminar Notificaciones</h1>
+    
+    <div class="debug-info">
+        <h3>📋 Estado del Sistema</h3>
+        <p><span class="status">Usuario Logueado:</span> <span id="user-status">Verificando...</span></p>
+        <p><span class="status">Token JWT:</span> <span id="token-status">Verificando...</span></p>
+        <p><span class="status">Archivo JS Activo:</span> <span id="js-file">Verificando...</span></p>
+    </div>
+    
+    <div class="debug-info">
+        <h3>🧪 Test de Funcionalidad</h3>
+        <button class="test-button" onclick="testDeleteFunction()">🗑️ Test Función Eliminar</button>
+        <button class="test-button" onclick="testNotificationsAPI()">📡 Test API Notificaciones</button>
+        <button class="test-button" onclick="inspectComponents()">🔍 Inspeccionar Componentes</button>
+        <div id="test-results"></div>
+    </div>
+    
+    <div class="debug-info">
+        <h3>🎯 Instrucciones de Verificación</h3>
+        <ol>
+            <li>Abre la consola del navegador (F12)</li>
+            <li>Ve a la campana de notificaciones</li>
+            <li>Ejecuta en consola: <code>console.log('Delete buttons:', document.querySelectorAll('[title="Eliminar notificación"]'))</code></li>
+            <li>Si es 0, los botones no se están renderizando</li>
+        </ol>
+    </div>
+
+    <script>
+        // Verificar estado del usuario
+        async function checkUserStatus() {
+            try {
+                const token = localStorage.getItem('access_token');
+                document.getElementById('token-status').textContent = token ? 'Presente' : 'No encontrado';
+                document.getElementById('token-status').className = token ? 'success' : 'error';
+                
+                if (token) {
+                    const response = await fetch('/api/auth/me', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (response.ok) {
+                        const user = await response.json();
+                        document.getElementById('user-status').textContent = `${user.name} (${user.role})`;
+                        document.getElementById('user-status').className = 'success';
+                    } else {
+                        document.getElementById('user-status').textContent = 'Error al verificar';
+                        document.getElementById('user-status').className = 'error';
+                    }
+                }
+            } catch (error) {
+                document.getElementById('user-status').textContent = 'Error de conexión';
+                document.getElementById('user-status').className = 'error';
+            }
+        }
+
+        // Verificar archivo JS activo
+        function checkActiveJS() {
+            const scripts = document.querySelectorAll('script[src*="index-"]');
+            if (scripts.length > 0) {
+                const src = scripts[scripts.length - 1].src;
+                document.getElementById('js-file').textContent = src.split('/').pop();
+                document.getElementById('js-file').className = 'success';
+            } else {
+                document.getElementById('js-file').textContent = 'No encontrado';
+                document.getElementById('js-file').className = 'error';
+            }
+        }
+
+        // Test función eliminar
+        async function testDeleteFunction() {
+            const results = document.getElementById('test-results');
+            results.innerHTML = '<p>🧪 Probando función eliminar...</p>';
+            
+            try {
+                const token = localStorage.getItem('access_token');
+                if (!token) {
+                    results.innerHTML = '<div class="debug-info error">❌ No hay token de autenticación</div>';
+                    return;
+                }
+
+                // Simular eliminación con ID de test
+                const response = await fetch('/api/communications/notifications/test-id', {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                results.innerHTML = `<div class="debug-info ${response.ok ? 'success' : 'warning'}">
+                    📡 Respuesta API: ${response.status} ${response.statusText}
+                </div>`;
+            } catch (error) {
+                results.innerHTML = `<div class="debug-info error">❌ Error: ${error.message}</div>`;
+            }
+        }
+
+        // Test API notificaciones
+        async function testNotificationsAPI() {
+            const results = document.getElementById('test-results');
+            results.innerHTML = '<p>🧪 Probando API notificaciones...</p>';
+            
+            try {
+                const token = localStorage.getItem('access_token');
+                if (!token) {
+                    results.innerHTML = '<div class="debug-info error">❌ No hay token de autenticación</div>';
+                    return;
+                }
+
+                const response = await fetch('/api/communications/notifications', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    results.innerHTML = `<div class="debug-info success">
+                        ✅ API funciona: ${data.length || 0} notificaciones encontradas
+                        <pre>${JSON.stringify(data.slice(0, 2), null, 2)}</pre>
+                    </div>`;
+                } else {
+                    results.innerHTML = `<div class="debug-info error">❌ Error API: ${response.status}</div>`;
+                }
+            } catch (error) {
+                results.innerHTML = `<div class="debug-info error">❌ Error: ${error.message}</div>`;
+            }
+        }
+
+        // Inspeccionar componentes React
+        function inspectComponents() {
+            const results = document.getElementById('test-results');
+            
+            // Buscar botones de eliminar
+            const deleteButtons = document.querySelectorAll('[title="Eliminar notificación"]');
+            const bellIcons = document.querySelectorAll('[class*="bell"], [class*="notification"]');
+            const userIcons = document.querySelectorAll('[class*="anticon-user"]');
+            
+            results.innerHTML = `<div class="debug-info">
+                🔍 <strong>Inspección DOM:</strong><br>
+                • Botones eliminar encontrados: <strong>${deleteButtons.length}</strong><br>
+                • Íconos campana: <strong>${bellIcons.length}</strong><br>
+                • Íconos usuario: <strong>${userIcons.length}</strong><br>
+                <br>
+                <strong>Comandos de consola útiles:</strong><br>
+                <code>document.querySelectorAll('[title="Eliminar notificación"]')</code><br>
+                <code>document.querySelectorAll('.ant-btn[title="Eliminar notificación"]')</code>
+            </div>`;
+        }
+
+        // Ejecutar verificaciones al cargar
+        window.onload = function() {
+            checkUserStatus();
+            checkActiveJS();
+            
+            // Verificar cada 3 segundos si hay botones de eliminar
+            setInterval(() => {
+                const deleteButtons = document.querySelectorAll('[title="Eliminar notificación"]');
+                if (deleteButtons.length > 0) {
+                    console.log('✅ Botones de eliminar encontrados:', deleteButtons.length);
+                }
+            }, 3000);
+        };
+    </script>
+</body>
+</html>

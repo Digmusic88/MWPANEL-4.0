@@ -1,0 +1,65 @@
+# Snapshot de código de MW Panel (producción /opt/mw-panel). Foto puntual, no sync.
+# NUNCA subir secretos ni artefactos.
+
+# Secretos
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.env.template
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*credentials*.json
+.auth_response.json
+ssl/
+
+# Dependencias y builds
+node_modules/
+dist/
+dist-*/
+frontend-dist/
+build/
+build-*/
+.next/
+coverage/
+
+# Datos y backups
+backups/
+local-backups/
+time-machine-backups/
+scheduled-backups/
+uploads/
+cambridge-mocks-data/
+*.sql
+*.sql.gz
+*.gz
+*.tar
+*.tgz
+*.tar.gz
+*.zip
+*.pdf
+*.log
+
+# Scripts ad-hoc de debug/test de la raíz (drift de producción, riesgo de secretos)
+test-*.js
+debug-*.js
+check-*.js
+verify-*.js
+*-debug.js
+test-*.html
+*token*.txt
+*.token
+.token
+*_auth*.json
+.*auth*.json
+decode-jwt.js
+temp_migrations/
+test-*.sh
+debug-*.sh
+admin_token.txt
+**/test-*.sh
+**/*_token.txt
+simple-test-*.js

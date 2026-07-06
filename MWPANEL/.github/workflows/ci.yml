@@ -1,0 +1,337 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+env:
+  NODE_VERSION: '18.x'
+  
+jobs:
+  # Job 1: Lint y verificación de código
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: |
+            mw-panel/backend/package-lock.json
+            mw-panel/frontend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: ./mw-panel/backend
+        run: npm ci
+
+      - name: Lint backend
+        working-directory: ./mw-panel/backend
+        run: npm run lint
+
+      - name: Check backend code formatting
+        working-directory: ./mw-panel/backend
+        run: npm run format:check
+
+      - name: Install frontend dependencies
+        working-directory: ./mw-panel/frontend
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: ./mw-panel/frontend
+        run: npm run lint
+
+      - name: Check frontend code formatting
+        working-directory: ./mw-panel/frontend
+        run: npm run format:check
+
+  # Job 2: Tests unitarios del backend
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: mwpanel_test
+          POSTGRES_PASSWORD: test123
+          POSTGRES_DB: mwpanel_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: mw-panel/backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./mw-panel/backend
+        run: npm ci
+
+      - name: Run migrations
+        working-directory: ./mw-panel/backend
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USERNAME: mwpanel_test
+          DB_PASSWORD: test123
+          DB_DATABASE: mwpanel_test
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          JWT_SECRET: test-jwt-secret-key
+          JWT_REFRESH_SECRET: test-jwt-refresh-secret
+        run: npm run migration:run
+
+      - name: Run tests with coverage
+        working-directory: ./mw-panel/backend
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USERNAME: mwpanel_test
+          DB_PASSWORD: test123
+          DB_DATABASE: mwpanel_test
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          JWT_SECRET: test-jwt-secret-key
+          JWT_REFRESH_SECRET: test-jwt-refresh-secret
+        run: npm run test:cov
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          directory: ./mw-panel/backend/coverage
+          flags: backend
+          name: backend-coverage
+
+  # Job 3: Tests unitarios del frontend
+  test-frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: mw-panel/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./mw-panel/frontend
+        run: npm ci
+
+      - name: Run tests with coverage
+        working-directory: ./mw-panel/frontend
+        run: npm run test:coverage
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          directory: ./mw-panel/frontend/coverage
+          flags: frontend
+          name: frontend-coverage
+
+  # Job 4: Build del frontend
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: mw-panel/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./mw-panel/frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: ./mw-panel/frontend
+        env:
+          NODE_ENV: production
+          VITE_API_URL: https://plataforma.mundoworld.school/api
+        run: npm run build
+
+      - name: Check build output
+        working-directory: ./mw-panel/frontend
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "Build failed: dist directory not found"
+            exit 1
+          fi
+          echo "Build successful. Contents:"
+          ls -la dist/
+
+  # Job 4: Build del backend
+  build-backend:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    needs: test-backend
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: mw-panel/backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./mw-panel/backend
+        run: npm ci
+
+      - name: Build backend
+        working-directory: ./mw-panel/backend
+        run: npm run build
+
+      - name: Check build output
+        working-directory: ./mw-panel/backend
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "Build failed: dist directory not found"
+            exit 1
+          fi
+          echo "Build successful"
+
+  # Job 5: Análisis de seguridad
+  security:
+    name: Security Checks
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run npm audit - Backend
+        working-directory: ./mw-panel/backend
+        run: |
+          npm audit --audit-level=high || true
+          npm audit --json > audit-backend.json || true
+
+      - name: Run npm audit - Frontend
+        working-directory: ./mw-panel/frontend
+        run: |
+          npm audit --audit-level=high || true
+          npm audit --json > audit-frontend.json || true
+
+      - name: Check for secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+
+  # Job 6: Docker build test
+  docker-build:
+    name: Docker Build Test
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend, test-frontend]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./mw-panel/backend
+          file: ./mw-panel/backend/Dockerfile
+          push: false
+          tags: mw-panel-backend:ci-test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build frontend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./mw-panel/frontend
+          file: ./mw-panel/frontend/Dockerfile
+          push: false
+          tags: mw-panel-frontend:ci-test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Job Final: Resumen y notificación
+  summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [lint, test-backend, test-frontend, build-frontend, build-backend, security, docker-build]
+    if: always()
+    
+    steps:
+      - name: Check job statuses
+        run: |
+          echo "## CI Pipeline Summary"
+          echo "- Lint & Format: ${{ needs.lint.result }}"
+          echo "- Backend Tests: ${{ needs.test-backend.result }}"
+          echo "- Frontend Tests: ${{ needs.test-frontend.result }}"
+          echo "- Frontend Build: ${{ needs.build-frontend.result }}"
+          echo "- Backend Build: ${{ needs.build-backend.result }}"
+          echo "- Security: ${{ needs.security.result }}"
+          echo "- Docker Build: ${{ needs.docker-build.result }}"
+          
+          if [ "${{ needs.lint.result }}" != "success" ] || \
+             [ "${{ needs.test-backend.result }}" != "success" ] || \
+             [ "${{ needs.test-frontend.result }}" != "success" ] || \
+             [ "${{ needs.build-frontend.result }}" != "success" ] || \
+             [ "${{ needs.build-backend.result }}" != "success" ]; then
+            echo "❌ CI Pipeline failed!"
+            exit 1
+          else
+            echo "✅ CI Pipeline passed!"
+          fi

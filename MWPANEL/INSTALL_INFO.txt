@@ -1,0 +1,37 @@
+MW PANEL 2.0 - INFORMACIÓN DE INSTALACIÓN
+==========================================
+Fecha de instalación: Tue Jul  1 18:15:26 CEST 2025
+Servidor: 91.99.205.204 (Hetzner)
+Dominio: plataforma.mundoworld.school
+URL de acceso: https://plataforma.mundoworld.school
+
+CREDENCIALES ADMINISTRATIVAS:
+  Email: info@mundoworld.school
+  Contraseña: SfMthIKhQsPe
+
+SERVICIOS ACTIVOS:
+  - Frontend: Nginx con SSL (puertos 80/443)
+  - Backend: NestJS API (puerto 3000)
+  - Base de datos: PostgreSQL 15 (puerto 5432)
+  - Cache: Redis 7 (puerto 6379)
+
+UBICACIONES IMPORTANTES:
+  - Aplicación: /opt/mw-panel
+  - Backups: /var/backups/mw-panel
+  - Logs: docker logs [nombre-contenedor]
+  - SSL: /etc/letsencrypt/live/plataforma.mundoworld.school/
+
+COMANDOS ÚTILES:
+  - Ver estado: docker ps
+  - Ver logs: docker logs mw-panel-backend-prod -f
+  - Backup manual: /usr/local/bin/mw-panel-backup.sh
+  - Reiniciar servicios: docker restart [nombre-contenedor]
+
+BACKUPS AUTOMÁTICOS:
+  - Programados diariamente a las 2:00 AM
+  - Conserva los últimos 7 backups
+  - Incluye base de datos, archivos y configuración
+
+RENOVACIÓN SSL:
+  - Automática vía cron (12:00 PM diario)
+  - Certificado válido hasta 2025-09-29

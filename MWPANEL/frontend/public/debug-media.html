@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Media URLs</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-item { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
+        audio, video { width: 100%; margin: 10px 0; }
+        img { max-width: 500px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>Test de URLs de Media de Google Drive</h1>
+    
+    <div class="test-item">
+        <h3>🎵 Test Audio - URL Original (No Funciona)</h3>
+        <p><strong>URL:</strong> https://drive.google.com/uc?export=download&id=1haJLZa8UsSYrJZFfJn_-8V6UWBGV7gwu</p>
+        <audio controls>
+            <source src="https://drive.google.com/uc?export=download&id=1haJLZa8UsSYrJZFfJn_-8V6UWBGV7gwu" type="audio/mpeg">
+            Tu navegador no soporta audio HTML5.
+        </audio>
+    </div>
+
+    <div class="test-item">
+        <h3>🎵 Test Audio - URL Corregida v1</h3>
+        <p><strong>URL:</strong> https://drive.usercontent.google.com/download?id=1haJLZa8UsSYrJZFfJn_-8V6UWBGV7gwu&export=download</p>
+        <audio controls>
+            <source src="https://drive.usercontent.google.com/download?id=1haJLZa8UsSYrJZFfJn_-8V6UWBGV7gwu&export=download" type="audio/mpeg">
+            Tu navegador no soporta audio HTML5.
+        </audio>
+    </div>
+
+    <div class="test-item">
+        <h3>🎵 Test Audio - URL Corregida v2 (Con confirmación)</h3>
+        <p><strong>URL:</strong> https://drive.google.com/uc?id=1haJLZa8UsSYrJZFfJn_-8V6UWBGV7gwu&confirm=t</p>
+        <audio controls>
+            <source src="https://drive.google.com/uc?id=1haJLZa8UsSYrJZFfJn_-8V6UWBGV7gwu&confirm=t" type="audio/mpeg">
+            Tu navegador no soporta audio HTML5.
+        </audio>
+    </div>
+
+    <div class="test-item">
+        <h3>🎵 Test Audio - URL Corregida v3 (Direct link)</h3>
+        <p><strong>URL:</strong> https://drive.google.com/file/d/1haJLZa8UsSYrJZFfJn_-8V6UWBGV7gwu/view?usp=drive_link</p>
+        <audio controls>
+            <source src="https://drive.google.com/file/d/1haJLZa8UsSYrJZFfJn_-8V6UWBGV7gwu/view?usp=drive_link" type="audio/mpeg">
+            Tu navegador no soporta audio HTML5.
+        </audio>
+    </div>
+
+    <div class="test-item">
+        <h3>🎵 Test Audio - URL Corregida v4 (Docs viewer)</h3>
+        <p><strong>URL:</strong> https://docs.google.com/uc?export=download&id=1haJLZa8UsSYrJZFfJn_-8V6UWBGV7gwu</p>
+        <audio controls>
+            <source src="https://docs.google.com/uc?export=download&id=1haJLZa8UsSYrJZFfJn_-8V6UWBGV7gwu" type="audio/mpeg">
+            Tu navegador no soporta audio HTML5.
+        </audio>
+    </div>
+
+    <div class="test-item">
+        <h3>🖼️ Test Imagen - URL Original</h3>
+        <p><strong>URL:</strong> https://drive.google.com/uc?export=download&id=[ID_IMAGEN]</p>
+        <p><em>Nota: Necesitamos una imagen para testear</em></p>
+    </div>
+
+    <div class="test-item">
+        <h3>📊 Test JavaScript - Función de Corrección</h3>
+        <button onclick="testUrlFix()">Probar Función de Corrección</button>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function fixGoogleDriveUrlV1(url, type) {
+            if (url.includes('drive.google.com/uc?export=download')) {
+                const fileId = url.match(/id=([^&]+)/)?.[1];
+                if (fileId) {
+                    switch (type) {
+                        case 'image':
+                            return `https://drive.google.com/uc?export=view&id=${fileId}`;
+                        case 'video':
+                        case 'audio':
+                            return `https://drive.usercontent.google.com/download?id=${fileId}&export=download`;
+                        default:
+                            return url;
+                    }
+                }
+            }
+            return url;
+        }
+
+        function fixGoogleDriveUrlV2(url, type) {
+            if (url.includes('drive.google.com/uc?export=download')) {
+                const fileId = url.match(/id=([^&]+)/)?.[1];
+                if (fileId) {
+                    switch (type) {
+                        case 'image':
+                            return `https://lh3.googleusercontent.com/d/${fileId}`;
+                        case 'video':
+                        case 'audio':
+                            return `https://drive.google.com/uc?id=${fileId}&confirm=t`;
+                        default:
+                            return url;
+                    }
+                }
+            }
+            return url;
+        }
+
+        function fixGoogleDriveUrlV3(url, type) {
+            if (url.includes('drive.google.com/uc?export=download')) {
+                const fileId = url.match(/id=([^&]+)/)?.[1];
+                if (fileId) {
+                    switch (type) {
+                        case 'image':
+                            return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+                        case 'video':
+                        case 'audio':
+                            return `https://docs.google.com/uc?export=download&id=${fileId}`;
+                        default:
+                            return url;
+                    }
+                }
+            }
+            return url;
+        }
+
+        function testUrlFix() {
+            const originalUrl = "https://drive.google.com/uc?export=download&id=1haJLZa8UsSYrJZFfJn_-8V6UWBGV7gwu";
+            
+            const audioV1 = fixGoogleDriveUrlV1(originalUrl, 'audio');
+            const audioV2 = fixGoogleDriveUrlV2(originalUrl, 'audio');
+            const audioV3 = fixGoogleDriveUrlV3(originalUrl, 'audio');
+            
+            const imageV1 = fixGoogleDriveUrlV1(originalUrl, 'image');
+            const imageV2 = fixGoogleDriveUrlV2(originalUrl, 'image');
+            const imageV3 = fixGoogleDriveUrlV3(originalUrl, 'image');
+            
+            document.getElementById('results').innerHTML = `
+                <h4>Estrategias de URLs para Audio:</h4>
+                <p><strong>Original:</strong> ${originalUrl}</p>
+                <p><strong>V1 (usercontent):</strong> ${audioV1}</p>
+                <p><strong>V2 (confirm=t):</strong> ${audioV2}</p>
+                <p><strong>V3 (docs):</strong> ${audioV3}</p>
+                
+                <h4>Estrategias de URLs para Imagen:</h4>
+                <p><strong>V1 (export=view):</strong> ${imageV1}</p>
+                <p><strong>V2 (googleusercontent):</strong> ${imageV2}</p>
+                <p><strong>V3 (thumbnail):</strong> ${imageV3}</p>
+                
+                <div style="margin-top: 20px; padding: 10px; background: #f0f0f0; border-radius: 8px;">
+                    <strong>Test rápido:</strong> 
+                    <button onclick="testImageLoad()">Probar Imagen V2</button>
+                    <div id="imageTest" style="margin-top: 10px;"></div>
+                </div>
+            `;
+        }
+
+        function testImageLoad() {
+            const fileId = "1haJLZa8UsSYrJZFfJn_-8V6UWBGV7gwu";
+            const imageUrl = `https://lh3.googleusercontent.com/d/${fileId}`;
+            
+            const img = new Image();
+            img.onload = function() {
+                document.getElementById('imageTest').innerHTML = `
+                    <span style="color: green;">✅ Imagen carga correctamente!</span><br>
+                    <img src="${imageUrl}" style="max-width: 200px; margin-top: 5px;">
+                `;
+            };
+            img.onerror = function() {
+                document.getElementById('imageTest').innerHTML = `
+                    <span style="color: red;">❌ Error cargando imagen</span>
+                `;
+            };
+            img.src = imageUrl;
+        }
+
+        // Test automático al cargar la página
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🔍 Página de debug cargada');
+            console.log('🎵 Probando URLs de audio...');
+            
+            // Test automático después de 2 segundos
+            setTimeout(testUrlFix, 2000);
+        });
+    </script>
+
+    <div class="test-item">
+        <h3>🔗 Enlaces Directos para Probar</h3>
+        <ul>
+            <li><a href="https://drive.google.com/uc?export=download&id=1haJLZa8UsSYrJZFfJn_-8V6UWBGV7gwu" target="_blank">URL Original (descarga)</a></li>
+            <li><a href="https://drive.usercontent.google.com/download?id=1haJLZa8UsSYrJZFfJn_-8V6UWBGV7gwu&export=download" target="_blank">URL Corregida (streaming)</a></li>
+        </ul>
+    </div>
+</body>
+</html>

@@ -1,0 +1,309 @@
+/* Estilos para el editor de texto enriquecido */
+
+.rich-text-editor {
+  .ProseMirror {
+    outline: none;
+    padding: 12px;
+    min-height: 150px;
+    max-height: 400px;
+    font-size: 16px; /* Prevent iOS auto-zoom on focus */
+    overflow-y: auto;
+    line-height: 1.6;
+    font-family: inherit;
+    color: #374151;
+  }
+
+  .ProseMirror p {
+    margin: 0.5rem 0;
+  }
+
+  .ProseMirror p:first-child {
+    margin-top: 0;
+  }
+
+  .ProseMirror p:last-child {
+    margin-bottom: 0;
+  }
+
+  .ProseMirror h1 {
+    font-size: 1.875rem;
+    font-weight: 700;
+    margin: 1rem 0 0.5rem 0;
+    color: #1f2937;
+  }
+
+  .ProseMirror h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 0.875rem 0 0.5rem 0;
+    color: #374151;
+  }
+
+  .ProseMirror h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0.75rem 0 0.5rem 0;
+    color: #4b5563;
+  }
+
+  .ProseMirror strong {
+    font-weight: 600;
+  }
+
+  .ProseMirror em {
+    font-style: italic;
+  }
+
+  .ProseMirror code {
+    background-color: #f3f4f6;
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.875em;
+    color: #dc2626;
+  }
+
+  .ProseMirror pre {
+    background-color: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin: 1rem 0;
+    overflow-x: auto;
+  }
+
+  .ProseMirror pre code {
+    background-color: transparent;
+    padding: 0;
+    color: #374151;
+  }
+
+  .ProseMirror ul {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+  }
+
+  .ProseMirror ol {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+  }
+
+  .ProseMirror li {
+    margin: 0.25rem 0;
+    line-height: 1.5;
+  }
+
+  .ProseMirror ul li {
+    list-style-type: disc;
+  }
+
+  .ProseMirror ol li {
+    list-style-type: decimal;
+  }
+
+  .ProseMirror a {
+    color: #3b82f6;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .ProseMirror a:hover {
+    color: #1d4ed8;
+    text-decoration: none;
+  }
+
+  .ProseMirror blockquote {
+    border-left: 4px solid #e5e7eb;
+    padding-left: 1rem;
+    margin: 1rem 0;
+    color: #6b7280;
+    font-style: italic;
+  }
+
+  .ProseMirror hr {
+    border: none;
+    border-top: 2px solid #e5e7eb;
+    margin: 1.5rem 0;
+  }
+
+  /* Placeholder cuando está vacío */
+  .ProseMirror.is-empty:first-child::before {
+    color: #9ca3af;
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+
+  /* Estilos para cuando el editor está enfocado */
+  .ProseMirror:focus {
+    box-shadow: 0 0 0 2px #3b82f6;
+    border-radius: 0.375rem;
+  }
+
+  /* Estilos para elementos seleccionados */
+  .ProseMirror ::selection {
+    background-color: #dbeafe;
+  }
+
+  /* Estilos para tablas (si se usan en el futuro) */
+  .ProseMirror table {
+    border-collapse: collapse;
+    margin: 1rem 0;
+    width: 100%;
+  }
+
+  .ProseMirror table td,
+  .ProseMirror table th {
+    border: 1px solid #e5e7eb;
+    padding: 0.5rem;
+    vertical-align: top;
+  }
+
+  .ProseMirror table th {
+    background-color: #f9fafb;
+    font-weight: 600;
+  }
+}
+
+/* Estilos para la barra de herramientas */
+.rich-text-toolbar {
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 8px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.rich-text-toolbar .ant-btn {
+  border-radius: 4px;
+  border-color: #d1d5db;
+}
+
+.rich-text-toolbar .ant-btn:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.rich-text-toolbar .ant-btn-primary {
+  background-color: #3b82f6;
+  border-color: #3b82f6;
+}
+
+.rich-text-toolbar .ant-btn-primary:hover {
+  background-color: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+/* Responsive - toolbar en móvil */
+@media (max-width: 640px) {
+  .rich-text-toolbar {
+    padding: 4px 8px;
+    gap: 2px;
+  }
+
+  .rich-text-toolbar .ant-btn {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+}
+
+/* Modo compacto para chat inline */
+.rich-text-editor-compact .ProseMirror {
+  min-height: 36px !important;
+  max-height: 140px;
+  padding: 6px 10px;
+  font-size: 14px;
+  overflow-y: auto;
+  line-height: 1.4;
+}
+
+.rich-text-editor-compact .ProseMirror p {
+  margin: 0;
+}
+
+.rich-text-editor-compact .ProseMirror p:first-child {
+  margin-top: 0;
+}
+
+.rich-text-editor-compact .ProseMirror p:last-child {
+  margin-bottom: 0;
+}
+
+/* Compacto en mobile - aun mas reducido */
+@media (max-width: 640px) {
+  .rich-text-editor-compact .ProseMirror {
+    min-height: 32px !important;
+    max-height: 100px;
+    padding: 5px 8px;
+    font-size: 14px;
+  }
+
+  .rich-text-editor-compact .rich-text-toolbar {
+    padding: 2px 4px;
+  }
+}
+
+/* Estilos para el renderizado del contenido HTML */
+.message-content {
+  line-height: 1.6;
+  color: #374151;
+}
+
+.message-content h1,
+.message-content h2,
+.message-content h3 {
+  margin: 0.5rem 0;
+  color: #1f2937;
+}
+
+.message-content p {
+  margin: 0.5rem 0;
+}
+
+.message-content ul,
+.message-content ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.message-content li {
+  margin: 0.25rem 0;
+}
+
+.message-content a {
+  color: #3b82f6;
+  text-decoration: underline;
+}
+
+.message-content a:hover {
+  color: #1d4ed8;
+}
+
+.message-content code {
+  background-color: #f3f4f6;
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.875em;
+  color: #dc2626;
+}
+
+.message-content pre {
+  background-color: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin: 1rem 0;
+  overflow-x: auto;
+}
+
+.message-content strong {
+  font-weight: 600;
+}
+
+.message-content em {
+  font-style: italic;
+}

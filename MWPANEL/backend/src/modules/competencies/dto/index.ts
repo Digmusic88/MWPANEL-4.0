@@ -1,0 +1,9 @@
+export { CreateLearningSituationDto } from './create-learning-situation.dto';
+export { UpdateLearningSituationDto } from './update-learning-situation.dto';
+export { CreateAssessmentDto } from './create-assessment.dto';
+export { CreateFormativeObservationDto } from './create-formative-observation.dto';
+export { UpdateFormativeObservationDto } from './update-formative-observation.dto';
+export { CreateDuaProfileDto } from './create-dua-profile.dto';
+export { UpdateDuaProfileDto } from './update-dua-profile.dto';
+export { CreateDuaAccommodationDto } from './create-dua-accommodation.dto';
+export { UpdateDuaAccommodationDto } from './update-dua-accommodation.dto';

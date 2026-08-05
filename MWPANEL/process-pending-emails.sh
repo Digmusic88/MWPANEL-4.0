@@ -45,7 +45,7 @@ echo "$PENDING_EMAILS" | jq -r '.[] | @json' | while read -r email_json; do
   
   # Enviar email via Resend
   RESPONSE=$(curl -s -X POST "https://api.resend.com/emails" \
-    -H "Authorization: Bearer re_iWc16WH8_9BoASRi5i2QBAdfjA1cBNyCg" \
+    -H "Authorization: " \
     -H "Content-Type: application/json" \
     -d "$JSON_DATA")
   

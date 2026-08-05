@@ -1,0 +1,19 @@
+DESCRIPCIÓN (campo "Description" en About, máx. ~160 caracteres):
+
+Plataforma de gestión administrativa escolar (matrículas, pagos, SEPA) integrada con MW Panel. React + NestJS + PostgreSQL.
+
+WEBSITE (opcional, si quieres enlazarlo):
+
+secretaria.mundoworld.school
+
+TOPICS sugeridos (añadir en "Topics", separados o uno a uno):
+
+school-management
+education
+nestjs
+react
+typescript
+postgresql
+sepa
+edtech
+open-source

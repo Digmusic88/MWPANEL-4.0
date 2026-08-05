@@ -9,7 +9,7 @@
 
 LOG_FILE="/var/log/mw-panel-npm-audit.log"
 ALERT_EMAIL="diegomusica88@gmail.com"
-RESEND_API_KEY="re_4i33V69C_8cBXkLJ3jT4gNg4zKurTcSHS"
+RESEND_API_KEY="..."
 
 log_message() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
